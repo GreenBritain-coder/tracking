@@ -77,32 +77,47 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
       // Wait for body first
       await page.waitForSelector('body', { timeout: 10000 });
       
-      // Wait for tracking-related content to appear (look for common phrases)
+      // Wait for tracking results section specifically (not just page navigation)
       let contentLoaded = false;
-      for (let i = 0; i < 10; i++) {
+      for (let i = 0; i < 15; i++) {
         await new Promise(resolve => setTimeout(resolve, 1000));
-        const pageText = await page.evaluate(() => {
+        const hasTrackingResults = await page.evaluate(() => {
           // @ts-ignore
-          return document.body.innerText || '';
+          const bodyText = document.body.innerText || '';
+          // Look for specific tracking status indicators (not navigation text)
+          const hasStatusHeading = bodyText.includes('We\'ve got it') || 
+                                   bodyText.includes('Item delivered') ||
+                                   bodyText.includes('On its way') ||
+                                   bodyText.includes('Delivered to');
+          
+          // Also check for "Tracking number:" label which indicates results loaded
+          const hasTrackingLabel = bodyText.includes('Tracking number:');
+          
+          // Make sure we're past the search form (check for status details)
+          const hasStatusDetails = bodyText.includes('expect to deliver') || 
+                                   bodyText.includes('on its way') ||
+                                   bodyText.includes('have your item') ||
+                                   bodyText.includes('delivered on');
+          
+          return (hasStatusHeading && hasTrackingLabel) || hasStatusDetails;
         });
         
-        // Check if we have actual tracking content (not just UI elements)
-        if (pageText.includes('We\'ve got it') || 
-            pageText.includes('expect to deliver') || 
-            pageText.includes('on its way') ||
-            pageText.includes('delivered') ||
-            pageText.includes('tracking number') ||
-            pageText.length > 200) {
+        if (hasTrackingResults) {
           contentLoaded = true;
+          console.log(`[${trackingNumber}] Tracking results loaded after ${i + 1} seconds`);
+          // Wait a bit more for all content to stabilize
+          await new Promise(resolve => setTimeout(resolve, 2000));
           break;
         }
       }
       
       if (!contentLoaded) {
+        console.warn(`[${trackingNumber}] Tracking content may not have fully loaded.`);
         // Final wait if content hasn't loaded
         await new Promise(resolve => setTimeout(resolve, 3000));
       }
     } catch (e) {
+      console.error(`[${trackingNumber}] Error waiting for content:`, e);
       // If waiting fails, just continue with a longer delay
       await new Promise(resolve => setTimeout(resolve, 5000));
     }
