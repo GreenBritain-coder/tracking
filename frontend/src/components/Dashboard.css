@@ -73,6 +73,46 @@
   font-size: 0.9rem;
 }
 
+.last-update-banner {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  padding: 1rem 1.5rem;
+  margin-bottom: 2rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  border-left: 4px solid #3498db;
+}
+
+.last-update-icon {
+  font-size: 2rem;
+  flex-shrink: 0;
+}
+
+.last-update-content {
+  flex: 1;
+}
+
+.last-update-label {
+  color: #7f8c8d;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.25rem;
+}
+
+.last-update-text {
+  color: #2c3e50;
+  font-size: 1rem;
+  margin-bottom: 0.25rem;
+}
+
+.last-update-time {
+  color: #7f8c8d;
+  font-size: 0.85rem;
+}
+
 .tracking-table-container {
   background: white;
   border-radius: 8px;

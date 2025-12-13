@@ -89,6 +89,16 @@ export default function Dashboard() {
     return new Date(dateString).toLocaleString();
   };
 
+  // Get the most recently updated tracking number
+  const getMostRecentUpdate = () => {
+    if (trackingNumbers.length === 0) return null;
+    return trackingNumbers.reduce((latest, current) => {
+      return new Date(current.updated_at) > new Date(latest.updated_at) ? current : latest;
+    });
+  };
+
+  const mostRecent = getMostRecentUpdate();
+
   if (loading && trackingNumbers.length === 0) {
     return <div className="loading">Loading...</div>;
   }
@@ -156,6 +166,22 @@ export default function Dashboard() {
           <div className="stat-label">Total</div>
         </div>
       </div>
+
+      {mostRecent && (
+        <div className="last-update-banner">
+          <div className="last-update-icon">
+            {STATUS_EMOJIS[mostRecent.current_status]}
+          </div>
+          <div className="last-update-content">
+            <div className="last-update-label">Last Status Update</div>
+            <div className="last-update-text">
+              <strong>{mostRecent.tracking_number}</strong> - {STATUS_LABELS[mostRecent.current_status]} 
+              {mostRecent.box_name && ` (${mostRecent.box_name})`}
+            </div>
+            <div className="last-update-time">Updated {formatDate(mostRecent.updated_at)}</div>
+          </div>
+        </div>
+      )}
 
       <div className="tracking-table-container">
         <table className="tracking-table">
