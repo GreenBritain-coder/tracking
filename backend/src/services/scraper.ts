@@ -71,61 +71,88 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
     });
     
     // Wait for Royal Mail's dynamic content to load
-    // Try to wait for specific elements that indicate content has loaded
+    // Wait longer and try to wait for actual tracking content
     try {
-      // Wait for any tracking content to appear (various possible selectors)
+      // Wait for body first
       await page.waitForSelector('body', { timeout: 10000 });
-      // Additional wait for JavaScript to render content
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      
+      // Wait for tracking-related content to appear (look for common phrases)
+      let contentLoaded = false;
+      for (let i = 0; i < 10; i++) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        const pageText = await page.evaluate(() => {
+          // @ts-ignore
+          return document.body.innerText || '';
+        });
+        
+        // Check if we have actual tracking content (not just UI elements)
+        if (pageText.includes('We\'ve got it') || 
+            pageText.includes('expect to deliver') || 
+            pageText.includes('on its way') ||
+            pageText.includes('delivered') ||
+            pageText.includes('tracking number') ||
+            pageText.length > 200) {
+          contentLoaded = true;
+          break;
+        }
+      }
+      
+      if (!contentLoaded) {
+        // Final wait if content hasn't loaded
+        await new Promise(resolve => setTimeout(resolve, 3000));
+      }
     } catch (e) {
       // If waiting fails, just continue with a longer delay
       await new Promise(resolve => setTimeout(resolve, 5000));
     }
     
     // Extract status information from the page
-    // Royal Mail's page structure - try multiple approaches
+    // Get all page text and filter out UI elements
     let statusText = '';
     let allPageText = '';
     
     try {
-      // Try to get the main content area text
-      // Royal Mail uses various structures, try common patterns
-      const contentSelectors = [
-        '[class*="tracking"]',
-        '[class*="status"]',
-        '[class*="result"]',
-        'main',
-        '[role="main"]',
-        '.content',
-        '#content',
-      ];
+      // Get all page text
+      allPageText = await page.evaluate(() => {
+        // @ts-ignore - document is available in browser context
+        return document.body.innerText || '';
+      });
       
-      for (const selector of contentSelectors) {
-        try {
-          const elements = await page.$$(selector);
-          if (elements.length > 0) {
-            for (const element of elements) {
-              const text = await page.evaluate((el) => el.textContent?.trim() || '', element);
-              if (text && text.length > statusText.length) {
-                statusText = text;
-              }
-            }
-          }
-        } catch (e) {
-          // Continue to next selector
-        }
-      }
+      // Try to extract just the main content area (exclude navigation, buttons, etc.)
+      // Look for the main content section
+      const mainContent = await page.evaluate(() => {
+        // @ts-ignore
+        const main = document.querySelector('main') || 
+                    document.querySelector('[role="main"]') ||
+                    document.querySelector('.content') ||
+                    document.querySelector('#content') ||
+                    document.querySelector('[class*="tracking"]') ||
+                    document.querySelector('[class*="result"]');
+        return main ? main.innerText : '';
+      });
       
-      // If we didn't get good content, get all page text as fallback
+      // Use main content if we got it, otherwise use all page text
+      statusText = mainContent && mainContent.length > 100 ? mainContent : allPageText;
+      
+      // Filter out common UI elements that might be getting picked up
+      const uiElements = ['close', 'search', 'clear input', 'menu', 'navigation', 'cookie', 'accept'];
+      const lines = statusText.split('\n').filter(line => {
+        const lineLower = line.toLowerCase().trim();
+        // Keep lines that are substantial or contain tracking-related keywords
+        return line.length > 10 && 
+               !uiElements.some(ui => lineLower === ui || lineLower.startsWith(ui + ' ')) &&
+               (line.length > 20 || 
+                lineLower.includes('deliver') || 
+                lineLower.includes('track') || 
+                lineLower.includes('item') ||
+                lineLower.includes('way'));
+      });
+      
+      statusText = lines.join('\n').trim();
+      
+      // If we still don't have good content, use all page text
       if (!statusText || statusText.length < 50) {
-        allPageText = await page.evaluate(() => {
-          // @ts-ignore - document is available in browser context
-          return document.body.innerText || '';
-        });
-        // Use all page text if we didn't get specific content
-        if (!statusText || statusText.length < 50) {
-          statusText = allPageText;
-        }
+        statusText = allPageText;
       }
     } catch (error) {
       console.error(`Error extracting status for ${trackingNumber}:`, error);
@@ -160,9 +187,11 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
     const allTextLower = allPageText.toLowerCase();
     const searchText = allTextLower || statusTextLower;
     
-    // PRIORITY 0: Check for future delivery phrases (should be SCANNED, not DELIVERED)
-    // These indicate the item is in transit, not yet delivered
-    const futureDeliveryPhrases = [
+    // PRIORITY 1: Check for DELIVERED status (VERY STRICT - only past tense, completed delivery)
+    // Must have MULTIPLE indicators to avoid false positives
+    
+    // First, check for explicit future delivery phrases - if found, it's SCANNED, not DELIVERED
+    const futureDeliveryIndicators = [
       'expect to deliver',
       'will deliver',
       'to be delivered',
@@ -171,54 +200,62 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
       'we expect to deliver',
       'on its way',
       'it\'s on its way',
+      'we have your item',
+      'at london central',
+      'at delivery office',
     ];
     
-    for (const phrase of futureDeliveryPhrases) {
-      if (searchText.includes(phrase)) {
-        console.log(`[${trackingNumber}] Detected SCANNED status (future delivery phrase: ${phrase})`);
-        return { status: 'scanned', details: statusText.substring(0, 500) };
-      }
-    }
-    
-    // PRIORITY 1: Check for DELIVERED status (past tense, specific phrases only)
-    // Use word boundaries to avoid matching "deliver" in "expect to deliver"
-    const deliveredPhrases = [
-      'has been delivered',
-      'was delivered',
-      'successfully delivered',
-      'item delivered',
-      'delivered to',
-      'delivered and signed',
-      'signed for and delivered',
-      'delivery completed',
-      'delivery successful',
-      // Only match standalone "delivered" if it's clearly past tense context
-    ];
-    
-    // Check for past tense "delivered" with context
-    const deliveredRegex = /\b(delivered|delivery completed|successfully delivered)\b/i;
-    const hasDeliveredKeyword = deliveredRegex.test(searchText);
-    
-    // But exclude if it's in a future context
-    const futureContextRegex = /(expect|will|should|going to|due to).*deliver/i;
-    const hasFutureContext = futureContextRegex.test(searchText);
-    
-    // Check for specific delivered phrases
-    let isDelivered = false;
-    for (const phrase of deliveredPhrases) {
-      if (searchText.includes(phrase)) {
-        isDelivered = true;
+    let hasFutureIndicator = false;
+    for (const indicator of futureDeliveryIndicators) {
+      if (searchText.includes(indicator)) {
+        hasFutureIndicator = true;
         break;
       }
     }
     
-    // Only mark as delivered if we have a clear delivered phrase AND no future context
-    if (isDelivered || (hasDeliveredKeyword && !hasFutureContext)) {
-      // Double-check it's not a future delivery
-      if (!hasFutureContext && !searchText.includes('expect') && !searchText.includes('will deliver')) {
-        console.log(`[${trackingNumber}] Detected DELIVERED status`);
-        return { status: 'delivered', details: statusText.substring(0, 500) };
+    // If we have ANY future delivery indicator, it's definitely SCANNED, not DELIVERED
+    if (hasFutureIndicator) {
+      console.log(`[${trackingNumber}] Detected SCANNED status (has future delivery indicator)`);
+      return { status: 'scanned', details: statusText.substring(0, 500) };
+    }
+    
+    // Only check for delivered if we have NO future indicators
+    // Require STRONG past-tense delivered phrases
+    const deliveredPhrases = [
+      'has been delivered',
+      'was delivered',
+      'successfully delivered',
+      'item delivered to',
+      'delivered and signed',
+      'signed for and delivered',
+      'delivery completed',
+      'delivery successful',
+    ];
+    
+    // Check for past tense "delivered" with word boundary (not "deliver")
+    const deliveredRegex = /\b(delivered|delivery completed|successfully delivered)\b/i;
+    const hasDeliveredKeyword = deliveredRegex.test(searchText);
+    
+    // Check for specific delivered phrases
+    let hasDeliveredPhrase = false;
+    for (const phrase of deliveredPhrases) {
+      if (searchText.includes(phrase)) {
+        hasDeliveredPhrase = true;
+        break;
       }
+    }
+    
+    // Only mark as delivered if:
+    // 1. We have a specific delivered phrase OR the word "delivered" with proper context
+    // 2. NO future delivery indicators
+    // 3. NO "expect" or "will" in the text
+    const hasNoFutureWords = !searchText.includes('expect') && 
+                             !searchText.includes('will deliver') && 
+                             !searchText.includes('to be delivered');
+    
+    if ((hasDeliveredPhrase || hasDeliveredKeyword) && hasNoFutureWords) {
+      console.log(`[${trackingNumber}] Detected DELIVERED status`);
+      return { status: 'delivered', details: statusText.substring(0, 500) };
     }
     
     // PRIORITY 2: Check for NOT_SCANNED / NOT FOUND status
