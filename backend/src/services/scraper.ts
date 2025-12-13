@@ -111,6 +111,7 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
     // Get all page text and filter out UI elements
     let statusText = '';
     let allPageText = '';
+    let statusHeader = '';
     
     try {
       // Get all page text
@@ -120,7 +121,7 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
       });
       
       // Try to extract the status header (like "We've got it", "Item delivered", etc.)
-      const statusHeader = await page.evaluate(() => {
+      statusHeader = await page.evaluate(() => {
         // @ts-ignore - document is available in browser context
         const h1 = document.querySelector('h1');
         // @ts-ignore
