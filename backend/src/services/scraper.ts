@@ -13,6 +13,7 @@ async function getBrowser(): Promise<Browser> {
         '--disable-dev-shm-usage',
         '--disable-accelerated-2d-canvas',
         '--disable-gpu',
+        '--disable-blink-features=AutomationControlled', // Hide automation
       ],
     });
   }
@@ -29,10 +30,38 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
     const browserInstance = await getBrowser();
     page = await browserInstance.newPage();
     
-    // Set user agent to avoid detection
+    // Set realistic viewport
+    await page.setViewport({ width: 1920, height: 1080 });
+    
+    // Set user agent and additional headers to avoid detection
     await page.setUserAgent(
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     );
+    
+    // Set additional headers to look more like a real browser
+    await page.setExtraHTTPHeaders({
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+      'Accept-Language': 'en-GB,en;q=0.9',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'Connection': 'keep-alive',
+      'Upgrade-Insecure-Requests': '1',
+      'Sec-Fetch-Dest': 'document',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Site': 'none',
+      'Cache-Control': 'max-age=0',
+    });
+    
+    // Remove webdriver property to avoid detection
+    await page.evaluateOnNewDocument(() => {
+      // @ts-ignore
+      Object.defineProperty(navigator, 'webdriver', {
+        get: () => false,
+      });
+    });
+    
+    // Add random delay before navigation to appear more human-like
+    const randomDelay = Math.floor(Math.random() * 2000) + 1000; // 1-3 seconds
+    await new Promise(resolve => setTimeout(resolve, randomDelay));
     
     // Navigate to Royal Mail tracking page
     const trackingUrl = `https://www.royalmail.com/track-your-item#/tracking-results/${trackingNumber}`;
@@ -116,26 +145,78 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
     const extractedText = statusText.substring(0, 200); // First 200 chars for logging
     console.log(`[${trackingNumber}] Extracted text (first 200 chars): ${extractedText}`);
     
+    // Check for Access Denied errors first
+    if (statusText.toLowerCase().includes('access denied') || 
+        statusText.toLowerCase().includes('you don\'t have permission')) {
+      console.log(`[${trackingNumber}] Access Denied - Royal Mail blocking request`);
+      return { 
+        status: 'not_scanned', 
+        details: 'Access Denied by Royal Mail. May need to wait or use different approach.' 
+      };
+    }
+    
     // Normalize the text for analysis
     const statusTextLower = statusText.toLowerCase();
     const allTextLower = allPageText.toLowerCase();
     const searchText = allTextLower || statusTextLower;
     
-    // PRIORITY 1: Check for DELIVERED status (most specific keywords first)
-    const deliveredKeywords = [
-      'delivered',
-      'delivery completed',
+    // PRIORITY 0: Check for future delivery phrases (should be SCANNED, not DELIVERED)
+    // These indicate the item is in transit, not yet delivered
+    const futureDeliveryPhrases = [
+      'expect to deliver',
+      'will deliver',
+      'to be delivered',
+      'expected delivery',
+      'delivery expected',
+      'we expect to deliver',
+      'on its way',
+      'it\'s on its way',
+    ];
+    
+    for (const phrase of futureDeliveryPhrases) {
+      if (searchText.includes(phrase)) {
+        console.log(`[${trackingNumber}] Detected SCANNED status (future delivery phrase: ${phrase})`);
+        return { status: 'scanned', details: statusText.substring(0, 500) };
+      }
+    }
+    
+    // PRIORITY 1: Check for DELIVERED status (past tense, specific phrases only)
+    // Use word boundaries to avoid matching "deliver" in "expect to deliver"
+    const deliveredPhrases = [
+      'has been delivered',
+      'was delivered',
       'successfully delivered',
       'item delivered',
       'delivered to',
-      'signed for and delivered',
       'delivered and signed',
+      'signed for and delivered',
+      'delivery completed',
       'delivery successful',
+      // Only match standalone "delivered" if it's clearly past tense context
     ];
     
-    for (const keyword of deliveredKeywords) {
-      if (searchText.includes(keyword)) {
-        console.log(`[${trackingNumber}] Detected DELIVERED status (keyword: ${keyword})`);
+    // Check for past tense "delivered" with context
+    const deliveredRegex = /\b(delivered|delivery completed|successfully delivered)\b/i;
+    const hasDeliveredKeyword = deliveredRegex.test(searchText);
+    
+    // But exclude if it's in a future context
+    const futureContextRegex = /(expect|will|should|going to|due to).*deliver/i;
+    const hasFutureContext = futureContextRegex.test(searchText);
+    
+    // Check for specific delivered phrases
+    let isDelivered = false;
+    for (const phrase of deliveredPhrases) {
+      if (searchText.includes(phrase)) {
+        isDelivered = true;
+        break;
+      }
+    }
+    
+    // Only mark as delivered if we have a clear delivered phrase AND no future context
+    if (isDelivered || (hasDeliveredKeyword && !hasFutureContext)) {
+      // Double-check it's not a future delivery
+      if (!hasFutureContext && !searchText.includes('expect') && !searchText.includes('will deliver')) {
+        console.log(`[${trackingNumber}] Detected DELIVERED status`);
         return { status: 'delivered', details: statusText.substring(0, 500) };
       }
     }
@@ -166,6 +247,7 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
       'out for delivery',
       'at delivery office',
       'on its way',
+      'it\'s on its way',
       'collected',
       'accepted',
       'processed',
@@ -177,6 +259,10 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
       'arrived at',
       'sorted',
       'ready for delivery',
+      'we have your item',
+      'at london central',
+      'at delivery office',
+      'we expect to deliver',
     ];
     
     let hasScannedIndicator = false;
