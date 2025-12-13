@@ -1,0 +1,230 @@
+import { useState, useEffect } from 'react';
+import { api, Box } from '../api/api';
+import './Analytics.css';
+
+interface BoxAnalytics {
+  id: number;
+  name: string;
+  total_items: number;
+  not_scanned_count: number;
+  scanned_count: number;
+  delivered_count: number;
+  avg_scan_to_delivery_hours: number | null;
+  avg_drop_to_scan_hours: number | null;
+}
+
+interface OverviewAnalytics {
+  total_items: number;
+  not_scanned_count: number;
+  scanned_count: number;
+  delivered_count: number;
+  avg_scan_to_delivery_hours: number | null;
+  avg_drop_to_scan_hours: number | null;
+}
+
+interface TrackingDetail {
+  id: number;
+  tracking_number: string;
+  current_status: string;
+  dropped_at: string;
+  scanned_at: string | null;
+  delivered_at: string | null;
+  drop_to_scan_hours: number | null;
+  scan_to_delivery_hours: number | null;
+}
+
+export default function Analytics() {
+  const [boxAnalytics, setBoxAnalytics] = useState<BoxAnalytics[]>([]);
+  const [overview, setOverview] = useState<OverviewAnalytics | null>(null);
+  const [selectedBox, setSelectedBox] = useState<number | null>(null);
+  const [boxDetails, setBoxDetails] = useState<{
+    box: Box;
+    tracking_numbers: TrackingDetail[];
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadAnalytics();
+  }, []);
+
+  useEffect(() => {
+    if (selectedBox) {
+      loadBoxDetails(selectedBox);
+    } else {
+      setBoxDetails(null);
+    }
+  }, [selectedBox]);
+
+  const loadAnalytics = async () => {
+    try {
+      setLoading(true);
+      const [boxesRes, overviewRes] = await Promise.all([
+        api.getBoxAnalytics(),
+        api.getOverviewAnalytics(),
+      ]);
+      setBoxAnalytics(boxesRes.data);
+      setOverview(overviewRes.data);
+    } catch (error) {
+      console.error('Failed to load analytics:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadBoxDetails = async (boxId: number) => {
+    try {
+      const response = await api.getBoxAnalyticsDetail(boxId);
+      setBoxDetails(response.data);
+    } catch (error) {
+      console.error('Failed to load box details:', error);
+    }
+  };
+
+  const formatHours = (hours: number | null) => {
+    if (hours === null) return 'N/A';
+    if (hours < 24) return `${hours.toFixed(1)}h`;
+    const days = Math.floor(hours / 24);
+    const remainingHours = hours % 24;
+    return `${days}d ${remainingHours.toFixed(1)}h`;
+  };
+
+  if (loading) {
+    return <div className="loading">Loading analytics...</div>;
+  }
+
+  return (
+    <div className="analytics">
+      <h2>Analytics</h2>
+
+      {overview && (
+        <div className="overview-section">
+          <h3>Overview</h3>
+          <div className="overview-stats">
+            <div className="stat-item">
+              <div className="stat-label">Total Items</div>
+              <div className="stat-value">{overview.total_items}</div>
+            </div>
+            <div className="stat-item">
+              <div className="stat-label">Not Scanned</div>
+              <div className="stat-value">{overview.not_scanned_count}</div>
+            </div>
+            <div className="stat-item">
+              <div className="stat-label">Scanned</div>
+              <div className="stat-value">{overview.scanned_count}</div>
+            </div>
+            <div className="stat-item">
+              <div className="stat-label">Delivered</div>
+              <div className="stat-value">{overview.delivered_count}</div>
+            </div>
+            <div className="stat-item">
+              <div className="stat-label">Avg Drop → Scan</div>
+              <div className="stat-value">
+                {formatHours(overview.avg_drop_to_scan_hours)}
+              </div>
+            </div>
+            <div className="stat-item">
+              <div className="stat-label">Avg Scan → Delivery</div>
+              <div className="stat-value">
+                {formatHours(overview.avg_scan_to_delivery_hours)}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="boxes-section">
+        <h3>Box Analytics</h3>
+        <div className="boxes-grid">
+          {boxAnalytics.map((box) => (
+            <div
+              key={box.id}
+              className={`box-card ${selectedBox === box.id ? 'selected' : ''}`}
+              onClick={() =>
+                setSelectedBox(selectedBox === box.id ? null : box.id)
+              }
+            >
+              <h4>{box.name}</h4>
+              <div className="box-stats">
+                <div className="box-stat">
+                  <span className="box-stat-label">Total:</span>
+                  <span className="box-stat-value">{box.total_items}</span>
+                </div>
+                <div className="box-stat">
+                  <span className="box-stat-label">🔴 Not Scanned:</span>
+                  <span className="box-stat-value">{box.not_scanned_count}</span>
+                </div>
+                <div className="box-stat">
+                  <span className="box-stat-label">🟡 Scanned:</span>
+                  <span className="box-stat-value">{box.scanned_count}</span>
+                </div>
+                <div className="box-stat">
+                  <span className="box-stat-label">🟢 Delivered:</span>
+                  <span className="box-stat-value">{box.delivered_count}</span>
+                </div>
+                <div className="box-stat">
+                  <span className="box-stat-label">Avg Drop → Scan:</span>
+                  <span className="box-stat-value">
+                    {formatHours(box.avg_drop_to_scan_hours)}
+                  </span>
+                </div>
+                <div className="box-stat">
+                  <span className="box-stat-label">Avg Scan → Delivery:</span>
+                  <span className="box-stat-value">
+                    {formatHours(box.avg_scan_to_delivery_hours)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {boxDetails && (
+        <div className="box-details-section">
+          <h3>Details: {boxDetails.box.name}</h3>
+          <div className="details-table-container">
+            <table className="details-table">
+              <thead>
+                <tr>
+                  <th>Tracking Number</th>
+                  <th>Status</th>
+                  <th>Dropped</th>
+                  <th>Scanned</th>
+                  <th>Delivered</th>
+                  <th>Drop → Scan</th>
+                  <th>Scan → Delivery</th>
+                </tr>
+              </thead>
+              <tbody>
+                {boxDetails.tracking_numbers.map((tn) => (
+                  <tr key={tn.id}>
+                    <td className="tracking-number">{tn.tracking_number}</td>
+                    <td>
+                      <span className={`status-badge status-${tn.current_status}`}>
+                        {tn.current_status}
+                      </span>
+                    </td>
+                    <td>{new Date(tn.dropped_at).toLocaleString()}</td>
+                    <td>
+                      {tn.scanned_at
+                        ? new Date(tn.scanned_at).toLocaleString()
+                        : '-'}
+                    </td>
+                    <td>
+                      {tn.delivered_at
+                        ? new Date(tn.delivered_at).toLocaleString()
+                        : '-'}
+                    </td>
+                    <td>{formatHours(tn.drop_to_scan_hours)}</td>
+                    <td>{formatHours(tn.scan_to_delivery_hours)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
