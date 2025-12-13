@@ -27,26 +27,45 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
         api_key: SCRAPINGBEE_API_KEY,
         url: trackingUrl,
         render_js: 'true', // Enable JavaScript rendering
-        wait: '5000', // Wait 5 seconds for content to load
+        wait: '10000', // Wait 10 seconds for content to load
+        wait_for: 'networkidle', // Wait until network is idle (all resources loaded)
         premium_proxy: 'true', // Use premium proxies for better success rate
       },
-      timeout: 60000, // 60 second timeout
+      timeout: 90000, // 90 second timeout
     });
 
     const html = response.data;
     console.log(`[${trackingNumber}] Received HTML, length: ${html.length} bytes`);
 
+    // Try to extract just the main tracking content (skip header, footer, cookie banners)
+    // Look for the main content area in Royal Mail's page
+    let mainContent = '';
+    const mainMatch = html.match(/<main[^>]*>([\s\S]*?)<\/main>/i);
+    const roleMainMatch = html.match(/<[^>]*role=["']main["'][^>]*>([\s\S]*?)<\/[^>]+>/i);
+    
+    const contentHtml = mainMatch?.[1] || roleMainMatch?.[1] || html;
+    
     // Extract text content from HTML
-    // Remove HTML tags to get plain text
-    const textContent = html
+    const textContent = contentHtml
       .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '') // Remove scripts
       .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '') // Remove styles
-      .replace(/<[^>]+>/g, ' ') // Remove all tags
+      .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '') // Remove header
+      .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '') // Remove footer
+      .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '') // Remove navigation
+      .replace(/<[^>]+>/g, ' ') // Remove all remaining tags
       .replace(/\s+/g, ' ') // Collapse whitespace
+      .replace(/Your privacy and our use of cookies.*?Continue/gi, '') // Remove cookie banner
+      .replace(/This site uses JavaScript.*?enabled/gi, '') // Remove JS warning
       .trim();
 
     console.log(`[${trackingNumber}] Extracted text, length: ${textContent.length} chars`);
-    console.log(`[${trackingNumber}] First 300 chars: ${textContent.substring(0, 300)}`);
+    console.log(`[${trackingNumber}] First 500 chars: ${textContent.substring(0, 500)}`);
+    
+    // Also log if we found key tracking phrases
+    const hasTrackingContent = textContent.toLowerCase().includes('we\'ve got it') || 
+                                textContent.toLowerCase().includes('expect to deliver') ||
+                                textContent.toLowerCase().includes('tracking number:');
+    console.log(`[${trackingNumber}] Has tracking content: ${hasTrackingContent}`);
 
     // Extract status header from HTML (look for h1, h2, h3 tags)
     let statusHeader = '';
