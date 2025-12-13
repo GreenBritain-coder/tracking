@@ -27,11 +27,11 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
         api_key: SCRAPINGBEE_API_KEY,
         url: trackingUrl,
         render_js: 'true', // Enable JavaScript rendering
-        wait: '10000', // Wait 10 seconds for content to load
-        wait_for: 'networkidle', // Wait until network is idle (all resources loaded)
+        wait: '8000', // Wait 8 seconds for content to load
         premium_proxy: 'true', // Use premium proxies for better success rate
+        block_resources: 'false', // Don't block any resources
       },
-      timeout: 90000, // 90 second timeout
+      timeout: 45000, // 45 second timeout (enough for 8s wait + page load)
     });
 
     const html = response.data;
