@@ -12,8 +12,10 @@ WORKDIR /app
 COPY package*.json ./
 COPY tsconfig.json ./
 
-# Install dependencies
-RUN npm ci
+# Install dependencies (including devDependencies for build)
+# Use npm install since package-lock.json may not exist
+# Ensure devDependencies are installed even if NODE_ENV=production is set
+RUN npm install --production=false
 
 # Copy source code
 COPY src ./src
