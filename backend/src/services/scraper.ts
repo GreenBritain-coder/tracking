@@ -6,7 +6,7 @@ let browser: Browser | null = null;
 async function getBrowser(): Promise<Browser> {
   if (!browser) {
     browser = await puppeteer.launch({
-      headless: true,
+      headless: 'new', // Use new headless mode (less detectable)
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -14,6 +14,7 @@ async function getBrowser(): Promise<Browser> {
         '--disable-accelerated-2d-canvas',
         '--disable-gpu',
         '--disable-blink-features=AutomationControlled', // Hide automation
+        '--window-size=1920,1080',
       ],
     });
   }
@@ -64,70 +65,116 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
     const randomDelay = Math.floor(Math.random() * 2000) + 1000; // 1-3 seconds
     await new Promise(resolve => setTimeout(resolve, randomDelay));
     
-    // Navigate to Royal Mail tracking page
-    const trackingUrl = `https://www.royalmail.com/track-your-item#/tracking-results/${trackingNumber}`;
-    console.log(`[${trackingNumber}] Navigating to: ${trackingUrl}`);
+    // Instead of using hash routing (which doesn't work reliably), use the search form
+    console.log(`[${trackingNumber}] Navigating to Royal Mail tracking page`);
     
-    await page.goto(trackingUrl, { 
-      waitUntil: 'domcontentloaded', // Use domcontentloaded instead of networkidle2 for faster SPA loading
+    await page.goto('https://www.royalmail.com/track-your-item', { 
+      waitUntil: 'networkidle0',
       timeout: 45000 
     });
     
-    // Royal Mail uses hash routing - wait for the app to render tracking results
-    console.log(`[${trackingNumber}] Page loaded, waiting for tracking content...`);
+    console.log(`[${trackingNumber}] Page loaded, looking for search form...`);
     
-    // Wait for the tracking content to appear (Royal Mail SPA needs time to render)
-    let contentLoaded = false;
-    let lastBodyText = '';
-    
-    for (let i = 0; i < 25; i++) { // Wait up to 25 seconds
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const pageCheck = await page.evaluate(() => {
-        // @ts-ignore
-        const bodyText = document.body.innerText || '';
-        
-        // Check if we're still seeing only navigation/header content
-        const isStillLoading = bodyText.includes('Your reference number*') || 
-                               (bodyText.includes('Track your item') && bodyText.length < 500);
-        
-        // Look for actual tracking status content
-        const hasRealContent = bodyText.includes('We\'ve got it') || 
-                              bodyText.includes('expect to deliver') || 
-                              bodyText.includes('have your item at') ||
-                              bodyText.includes('on its way') ||
-                              bodyText.includes('Delivered to') ||
-                              bodyText.includes('Item delivered') ||
-                              bodyText.includes('Tracking number:');
-        
-        return {
-          bodyText: bodyText.substring(0, 300), // First 300 chars for logging
-          hasRealContent,
-          isStillLoading,
-          textLength: bodyText.length
-        };
+    // Wait for the tracking number input field to appear
+    try {
+      await page.waitForSelector('input[type="text"], input[name*="track"], input[id*="track"]', { 
+        timeout: 10000,
+        visible: true 
       });
       
-      lastBodyText = pageCheck.bodyText;
+      console.log(`[${trackingNumber}] Found input field, entering tracking number...`);
       
-      if (pageCheck.hasRealContent && !pageCheck.isStillLoading) {
-        contentLoaded = true;
-        console.log(`[${trackingNumber}] ✅ Tracking results loaded after ${i + 1} seconds`);
-        // Wait a bit more for animations/content to fully render
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        break;
+      // Find and fill the tracking number input
+      await page.evaluate((tn) => {
+        // @ts-ignore
+        const inputs = Array.from(document.querySelectorAll('input[type="text"]'));
+        // Find the tracking number input (usually has placeholder or label about tracking)
+        const trackingInput = inputs.find(input => {
+          const placeholder = input.getAttribute('placeholder') || '';
+          const label = input.getAttribute('aria-label') || '';
+          return placeholder.toLowerCase().includes('track') || 
+                 placeholder.toLowerCase().includes('reference') ||
+                 label.toLowerCase().includes('track') ||
+                 label.toLowerCase().includes('reference');
+        });
+        
+        if (trackingInput) {
+          // @ts-ignore
+          trackingInput.value = tn;
+          // @ts-ignore
+          trackingInput.dispatchEvent(new Event('input', { bubbles: true }));
+          // @ts-ignore
+          trackingInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      }, trackingNumber);
+      
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Click the track/search button
+      console.log(`[${trackingNumber}] Looking for submit button...`);
+      const buttonClicked = await page.evaluate(() => {
+        // @ts-ignore
+        const buttons = Array.from(document.querySelectorAll('button, input[type="submit"], a[role="button"]'));
+        const trackButton = buttons.find(btn => {
+          const text = btn.textContent || btn.getAttribute('value') || '';
+          return text.toLowerCase().includes('track') || 
+                 text.toLowerCase().includes('search') ||
+                 text.toLowerCase().includes('submit');
+        });
+        
+        if (trackButton) {
+          // @ts-ignore
+          trackButton.click();
+          return true;
+        }
+        return false;
+      });
+      
+      if (buttonClicked) {
+        console.log(`[${trackingNumber}] Clicked track button, waiting for results...`);
+      } else {
+        console.warn(`[${trackingNumber}] Could not find track button, trying Enter key...`);
+        await page.keyboard.press('Enter');
       }
       
-      // Log progress every 5 seconds
-      if ((i + 1) % 5 === 0) {
-        console.log(`[${trackingNumber}] Still waiting... (${i + 1}s) Text length: ${pageCheck.textLength}, Has content: ${pageCheck.hasRealContent}, Still loading: ${pageCheck.isStillLoading}`);
+      // Wait for results to load
+      let contentLoaded = false;
+      for (let i = 0; i < 20; i++) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        const hasResults = await page.evaluate(() => {
+          // @ts-ignore
+          const bodyText = document.body.innerText || '';
+          return bodyText.includes('We\'ve got it') || 
+                 bodyText.includes('expect to deliver') || 
+                 bodyText.includes('have your item at') ||
+                 bodyText.includes('Tracking number:') ||
+                 bodyText.includes('Service used:');
+        });
+        
+        if (hasResults) {
+          contentLoaded = true;
+          console.log(`[${trackingNumber}] ✅ Tracking results appeared after ${i + 1} seconds`);
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          break;
+        }
+        
+        if ((i + 1) % 5 === 0) {
+          console.log(`[${trackingNumber}] Still waiting for results... (${i + 1}s)`);
+        }
       }
-    }
-    
-    if (!contentLoaded) {
-      console.warn(`[${trackingNumber}] ⚠️ Tracking content didn't load within 25 seconds`);
-      console.warn(`[${trackingNumber}] Last seen text: ${lastBodyText}`);
-      // Try one more longer wait
+      
+      if (!contentLoaded) {
+        console.warn(`[${trackingNumber}] ⚠️ Tracking results didn't appear within 20 seconds`);
+      }
+      
+    } catch (error) {
+      console.error(`[${trackingNumber}] Error interacting with search form:`, error);
+      console.log(`[${trackingNumber}] Falling back to direct URL method...`);
+      
+      // Fallback: try the direct hash URL
+      const trackingUrl = `https://www.royalmail.com/track-your-item#/tracking-results/${trackingNumber}`;
+      await page.goto(trackingUrl, { waitUntil: 'networkidle0', timeout: 30000 });
       await new Promise(resolve => setTimeout(resolve, 5000));
     }
     
