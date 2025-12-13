@@ -26,7 +26,8 @@ RUN NODE_ENV=development npm install
 COPY src ./src
 
 # Build the application (ensure NODE_ENV is development for build)
-RUN NODE_ENV=development npx tsc
+# Create dist directory first, then compile with verbose output
+RUN mkdir -p dist && NODE_ENV=development npx tsc --pretty --listEmittedFiles
 
 # Expose port
 EXPOSE 3000
