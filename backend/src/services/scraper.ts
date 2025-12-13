@@ -70,11 +70,14 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
                                 textContent.toLowerCase().includes('tracking number:');
     console.log(`[${trackingNumber}] Has tracking content: ${hasTrackingContent}`);
 
-    // Extract status header from HTML (look for h1, h2, h3 tags)
+    // Extract status header from HTML
+    // Royal Mail uses various heading structures, so try multiple approaches
     let statusHeader = '';
-    const h1Match = html.match(/<h1[^>]*>(.*?)<\/h1>/i);
-    const h2Match = html.match(/<h2[^>]*>(.*?)<\/h2>/i);
-    const h3Match = html.match(/<h3[^>]*>(.*?)<\/h3>/i);
+    
+    // Try to find headings with regex (allows for nested tags)
+    const h1Match = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+    const h2Match = html.match(/<h2[^>]*>([\s\S]*?)<\/h2>/i);
+    const h3Match = html.match(/<h3[^>]*>([\s\S]*?)<\/h3>/i);
     
     const headingMatch = h1Match || h2Match || h3Match;
     if (headingMatch && headingMatch[1]) {
@@ -85,15 +88,33 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
         .replace(/&lt;/g, '<')
         .replace(/&gt;/g, '>')
         .replace(/&quot;/g, '"')
+        .replace(/\s+/g, ' ') // Collapse whitespace
         .trim();
       
       // Filter out generic headings
       if (statusHeader.length < 100 && 
           !statusHeader.toLowerCase().includes('royal mail') &&
-          !statusHeader.toLowerCase().includes('track your item')) {
-        console.log(`[${trackingNumber}] Extracted status header: ${statusHeader}`);
+          !statusHeader.toLowerCase().includes('track your item') &&
+          statusHeader.length > 0) {
+        console.log(`[${trackingNumber}] Extracted status header: "${statusHeader}"`);
       } else {
         statusHeader = '';
+      }
+    }
+    
+    // If no heading found, try to extract from the text content
+    if (!statusHeader) {
+      // Look for common status phrases in the beginning of the text
+      const textStart = textContent.substring(0, 200);
+      if (textStart.includes('We\'ve got it')) {
+        statusHeader = 'We\'ve got it';
+        console.log(`[${trackingNumber}] Extracted status header from text: "${statusHeader}"`);
+      } else if (textStart.includes('Item delivered')) {
+        statusHeader = 'Item delivered';
+        console.log(`[${trackingNumber}] Extracted status header from text: "${statusHeader}"`);
+      } else if (textStart.includes('On its way')) {
+        statusHeader = 'On its way';
+        console.log(`[${trackingNumber}] Extracted status header from text: "${statusHeader}"`);
       }
     }
 
@@ -256,7 +277,7 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
       details: textContent.substring(0, 500) || 'Unable to determine status from page content',
       statusHeader: statusHeader || undefined
     };
-
+    
   } catch (error) {
     console.error(`Error checking status for ${trackingNumber}:`, error);
     if (axios.isAxiosError(error)) {
