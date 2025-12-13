@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Response } from 'express';
 import { body, validationResult } from 'express-validator';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import {
@@ -19,7 +19,7 @@ const router = express.Router();
 router.use(authenticate);
 
 // Boxes endpoints
-router.get('/boxes', async (req, res) => {
+router.get('/boxes', async (req: AuthRequest, res: Response) => {
   try {
     const boxes = await getAllBoxes();
     res.json(boxes);
@@ -32,7 +32,7 @@ router.get('/boxes', async (req, res) => {
 router.post(
   '/boxes',
   [body('name').notEmpty().trim()],
-  async (req, res) => {
+  async (req: AuthRequest, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
@@ -49,7 +49,7 @@ router.post(
   }
 );
 
-router.delete('/boxes/:id', async (req, res) => {
+router.delete('/boxes/:id', async (req: AuthRequest, res: Response) => {
   try {
     const id = parseInt(req.params.id);
     const deleted = await deleteBox(id);
@@ -64,7 +64,7 @@ router.delete('/boxes/:id', async (req, res) => {
 });
 
 // Tracking numbers endpoints
-router.get('/numbers', async (req, res) => {
+router.get('/numbers', async (req: AuthRequest, res: Response) => {
   try {
     const boxId = req.query.boxId ? parseInt(req.query.boxId as string) : undefined;
     const trackingNumbers = boxId
@@ -77,7 +77,7 @@ router.get('/numbers', async (req, res) => {
   }
 });
 
-router.get('/numbers/:id', async (req, res) => {
+router.get('/numbers/:id', async (req: AuthRequest, res: Response) => {
   try {
     const id = parseInt(req.params.id);
     const trackingNumber = await getTrackingNumberById(id);
@@ -161,7 +161,7 @@ router.post(
   }
 );
 
-router.delete('/numbers/:id', async (req, res) => {
+router.delete('/numbers/:id', async (req: AuthRequest, res: Response) => {
   try {
     const id = parseInt(req.params.id);
     const deleted = await deleteTrackingNumber(id);

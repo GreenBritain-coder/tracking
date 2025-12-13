@@ -115,7 +115,7 @@ export async function updateTrackingStatus(
 
 export async function deleteTrackingNumber(id: number): Promise<boolean> {
   const result = await pool.query('DELETE FROM tracking_numbers WHERE id = $1', [id]);
-  return result.rowCount > 0;
+  return (result.rowCount ?? 0) > 0;
 }
 
 export async function bulkCreateTrackingNumbers(

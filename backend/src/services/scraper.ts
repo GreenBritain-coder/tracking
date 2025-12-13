@@ -42,7 +42,7 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
     });
     
     // Wait a bit for dynamic content to load
-    await page.waitForTimeout(2000);
+    await new Promise(resolve => setTimeout(resolve, 2000));
     
     // Try to find tracking status on the page
     // Royal Mail uses various selectors, we'll try multiple approaches

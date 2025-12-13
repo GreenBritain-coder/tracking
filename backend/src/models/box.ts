@@ -26,6 +26,6 @@ export async function getBoxById(id: number): Promise<Box | null> {
 
 export async function deleteBox(id: number): Promise<boolean> {
   const result = await pool.query('DELETE FROM boxes WHERE id = $1', [id]);
-  return result.rowCount > 0;
+  return (result.rowCount ?? 0) > 0;
 }
 
