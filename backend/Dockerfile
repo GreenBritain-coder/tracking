@@ -14,14 +14,14 @@ COPY tsconfig.json ./
 
 # Install dependencies (including devDependencies for build)
 # Use npm install since package-lock.json may not exist
-# Ensure devDependencies are installed even if NODE_ENV=production is set
-RUN npm install --production=false
+# Explicitly set NODE_ENV=development to ensure devDependencies are installed
+RUN NODE_ENV=development npm install
 
 # Copy source code
 COPY src ./src
 
-# Build the application
-RUN npm run build
+# Build the application (ensure NODE_ENV is development for build)
+RUN NODE_ENV=development npm run build
 
 # Expose port
 EXPOSE 3000
@@ -29,6 +29,9 @@ EXPOSE 3000
 # Set environment variable for Puppeteer
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+
+# Set NODE_ENV to production for runtime (can be overridden by deployment platform)
+ENV NODE_ENV=production
 
 # Start the application
 CMD ["npm", "start"]
