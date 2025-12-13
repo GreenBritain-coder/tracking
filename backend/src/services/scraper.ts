@@ -329,12 +329,35 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
   } catch (error) {
     console.error(`Error checking status for ${trackingNumber}:`, error);
     if (axios.isAxiosError(error)) {
-      console.error(`ScrapingBee API error: ${error.response?.status} ${error.response?.statusText}`);
-      console.error(`Response data:`, error.response?.data);
+      if (error.response) {
+        // Server responded with error status
+        console.error(`ScrapingBee API error: ${error.response.status} ${error.response.statusText}`);
+        console.error(`Response data:`, JSON.stringify(error.response.data, null, 2));
+        console.error(`Response headers:`, error.response.headers);
+      } else if (error.request) {
+        // Request was made but no response received (timeout, network error, etc.)
+        console.error(`ScrapingBee request failed - no response received`);
+        console.error(`Request config:`, {
+          url: error.config?.url,
+          method: error.config?.method,
+          timeout: error.config?.timeout,
+          params: error.config?.params
+        });
+        if (error.code === 'ECONNABORTED') {
+          console.error(`Request timed out after ${error.config?.timeout}ms`);
+        } else {
+          console.error(`Error code: ${error.code}`);
+        }
+      } else {
+        // Error setting up the request
+        console.error(`Error setting up ScrapingBee request:`, error.message);
+      }
+    } else {
+      console.error(`Non-Axios error:`, error);
     }
     return { 
       status: 'not_scanned', 
-      details: `Error: ${error instanceof Error ? error.message : 'Unknown error'}` 
+      details: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
     };
   }
 }
