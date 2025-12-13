@@ -12,6 +12,7 @@ import {
 } from '../models/tracking';
 import { createBox, getAllBoxes, getBoxById, deleteBox } from '../models/box';
 import { getStatusHistory } from '../models/statusHistory';
+import { updateAllTrackingStatuses } from '../services/scheduler';
 
 const router = express.Router();
 
@@ -171,6 +172,24 @@ router.delete('/numbers/:id', async (req: AuthRequest, res: Response) => {
     res.json({ message: 'Tracking number deleted successfully' });
   } catch (error) {
     console.error('Error deleting tracking number:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Manual refresh endpoint - trigger status update for all tracking numbers
+router.post('/refresh', async (req: AuthRequest, res: Response) => {
+  try {
+    // Start the update process (non-blocking)
+    updateAllTrackingStatuses().catch((error) => {
+      console.error('Error in manual refresh:', error);
+    });
+    
+    res.json({ 
+      message: 'Tracking status refresh started. Check logs for progress.',
+      note: 'This may take a few minutes depending on the number of tracking numbers.'
+    });
+  } catch (error) {
+    console.error('Error starting manual refresh:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

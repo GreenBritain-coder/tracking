@@ -26,6 +26,7 @@ export default function Dashboard() {
   const [selectedBox, setSelectedBox] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -64,6 +65,26 @@ export default function Dashboard() {
     }
   };
 
+  const handleRefresh = async () => {
+    if (!confirm('This will refresh all tracking statuses. This may take a few minutes. Continue?')) {
+      return;
+    }
+
+    try {
+      setRefreshing(true);
+      await api.refreshTrackingStatuses();
+      alert('Refresh started! Statuses will update shortly. The page will refresh in 10 seconds.');
+      // Reload data after a delay to see updated statuses
+      setTimeout(() => {
+        loadData();
+        setRefreshing(false);
+      }, 10000);
+    } catch (err: any) {
+      setRefreshing(false);
+      alert(err.response?.data?.error || 'Failed to start refresh');
+    }
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString();
   };
@@ -76,23 +97,33 @@ export default function Dashboard() {
     <div className="dashboard">
       <div className="dashboard-header">
         <h2>Tracking Dashboard</h2>
-        <div className="filter-controls">
-          <label>
-            Filter by Box:
-            <select
-              value={selectedBox || ''}
-              onChange={(e) =>
-                setSelectedBox(e.target.value ? parseInt(e.target.value) : null)
-              }
-            >
-              <option value="">All Boxes</option>
-              {boxes.map((box) => (
-                <option key={box.id} value={box.id}>
-                  {box.name}
-                </option>
-              ))}
-            </select>
-          </label>
+        <div className="dashboard-actions">
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="refresh-btn"
+            style={{ marginRight: '10px', padding: '8px 16px', cursor: refreshing ? 'not-allowed' : 'pointer' }}
+          >
+            {refreshing ? 'Refreshing...' : '🔄 Refresh All Statuses'}
+          </button>
+          <div className="filter-controls">
+            <label>
+              Filter by Box:
+              <select
+                value={selectedBox || ''}
+                onChange={(e) =>
+                  setSelectedBox(e.target.value ? parseInt(e.target.value) : null)
+                }
+              >
+                <option value="">All Boxes</option>
+                {boxes.map((box) => (
+                  <option key={box.id} value={box.id}>
+                    {box.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
         </div>
       </div>
 

@@ -4,7 +4,7 @@ import { checkRoyalMailStatus } from './scraper';
 
 let isRunning = false;
 
-async function updateAllTrackingStatuses() {
+export async function updateAllTrackingStatuses() {
   if (isRunning) {
     console.log('Update job already running, skipping...');
     return;

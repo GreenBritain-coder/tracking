@@ -47,5 +47,8 @@ export const api = {
   getBoxAnalyticsDetail: (boxId: number) =>
     axios.get(`${API_URL}/analytics/boxes/${boxId}`),
   getOverviewAnalytics: () => axios.get(`${API_URL}/analytics/overview`),
+
+  // Refresh tracking statuses
+  refreshTrackingStatuses: () => axios.post(`${API_URL}/tracking/refresh`),
 };
 
