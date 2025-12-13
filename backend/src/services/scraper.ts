@@ -22,32 +22,19 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
     // Use ScrapingBee to render the Royal Mail tracking page
     const trackingUrl = `https://www.royalmail.com/track-your-item#/tracking-results/${trackingNumber}`;
     
-    // Use ScrapingBee with custom JavaScript to wait for tracking content
-    const jsSnippet = `
-      // Wait for tracking results to appear (check every 500ms for up to 20 seconds)
-      for (let i = 0; i < 40; i++) {
-        await new Promise(resolve => setTimeout(resolve, 500));
-        const bodyText = document.body.innerText || '';
-        if (bodyText.includes('We\\'ve got it') || 
-            bodyText.includes('expect to deliver') ||
-            bodyText.includes('Tracking number:') ||
-            bodyText.includes('Service used:')) {
-          break;
-        }
-      }
-    `;
-
+    // Try a longer fixed wait since Royal Mail's JavaScript takes time to load
     const response = await axios.get('https://app.scrapingbee.com/api/v1/', {
       params: {
         api_key: SCRAPINGBEE_API_KEY,
         url: trackingUrl,
         render_js: 'true', // Enable JavaScript rendering
-        wait: '3000', // Initial wait for page load
-        js_snippet: jsSnippet, // Custom JavaScript to wait for content
+        wait: '15000', // Wait 15 seconds for Royal Mail's SPA to render
         premium_proxy: 'true', // Use premium proxies for better success rate
         block_resources: 'false', // Don't block any resources
+        window_width: '1920',
+        window_height: '1080',
       },
-      timeout: 60000, // 60 second timeout for the custom JS execution
+      timeout: 30000, // 30 second timeout
     });
 
     const html = response.data;
