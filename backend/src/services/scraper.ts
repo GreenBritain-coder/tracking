@@ -22,23 +22,51 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
     // Use ScrapingBee to render the Royal Mail tracking page
     const trackingUrl = `https://www.royalmail.com/track-your-item#/tracking-results/${trackingNumber}`;
     
-    // Try a longer fixed wait since Royal Mail's JavaScript takes time to load
-    const response = await axios.get('https://app.scrapingbee.com/api/v1/', {
-      params: {
-        api_key: SCRAPINGBEE_API_KEY,
-        url: trackingUrl,
-        render_js: 'true', // Enable JavaScript rendering
-        wait: '15000', // Wait 15 seconds for Royal Mail's SPA to render
-        premium_proxy: 'true', // Use premium proxies for better success rate
-        block_resources: 'false', // Don't block any resources
-        window_width: '1920',
-        window_height: '1080',
-      },
-      timeout: 30000, // 30 second timeout
-    });
+    // Retry up to 2 times if we don't get tracking content
+    let html = '';
+    let attempt = 0;
+    const maxAttempts = 2;
+    
+    for (attempt = 1; attempt <= maxAttempts; attempt++) {
+      if (attempt > 1) {
+        console.log(`[${trackingNumber}] Retry attempt ${attempt}/${maxAttempts}...`);
+        // Wait a bit between retries
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+      
+      // Try with longer wait time
+      const response = await axios.get('https://app.scrapingbee.com/api/v1/', {
+        params: {
+          api_key: SCRAPINGBEE_API_KEY,
+          url: trackingUrl,
+          render_js: 'true', // Enable JavaScript rendering
+          wait: '20000', // Wait 20 seconds for Royal Mail's SPA to render
+          premium_proxy: 'true', // Use premium proxies for better success rate
+          block_resources: 'false', // Don't block any resources
+          window_width: '1920',
+          window_height: '1080',
+        },
+        timeout: 35000, // 35 second timeout
+      });
 
-    const html = response.data;
-    console.log(`[${trackingNumber}] Received HTML, length: ${html.length} bytes`);
+      html = response.data;
+      console.log(`[${trackingNumber}] Received HTML (attempt ${attempt}), length: ${html.length} bytes`);
+      
+      // Quick check: does this look like tracking content?
+      const quickCheck = html.toLowerCase();
+      if (quickCheck.includes('tracking number:') || 
+          quickCheck.includes('we\'ve got it') || 
+          quickCheck.includes('expect to deliver') ||
+          (html.length < 300000 && quickCheck.includes('service used:'))) {
+        console.log(`[${trackingNumber}] Tracking content detected on attempt ${attempt}`);
+        break; // Got good content, stop retrying
+      } else {
+        console.log(`[${trackingNumber}] No tracking content detected on attempt ${attempt}, may retry...`);
+        if (attempt === maxAttempts) {
+          console.warn(`[${trackingNumber}] Failed to get tracking content after ${maxAttempts} attempts`);
+        }
+      }
+    }
 
     // Try to extract just the main tracking content (skip header, footer, cookie banners)
     // Look for the main content area in Royal Mail's page
