@@ -22,31 +22,34 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
     // Use ScrapingBee to render the Royal Mail tracking page
     const trackingUrl = `https://www.royalmail.com/track-your-item#/tracking-results/${trackingNumber}`;
     
-    // Retry up to 2 times if we don't get tracking content
+    // Retry up to 3 times if we don't get tracking content
     let html = '';
     let attempt = 0;
-    const maxAttempts = 2;
+    const maxAttempts = 3;
     
     for (attempt = 1; attempt <= maxAttempts; attempt++) {
       if (attempt > 1) {
         console.log(`[${trackingNumber}] Retry attempt ${attempt}/${maxAttempts}...`);
-        // Wait a bit between retries
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Wait a bit between retries (random 3-5 seconds to look more human-like)
+        const delay = 3000 + Math.floor(Math.random() * 2000);
+        await new Promise(resolve => setTimeout(resolve, delay));
       }
       
-      // Try with longer wait time
+      // Use slightly different wait times per attempt to avoid patterns
+      const waitTime = 18000 + (attempt * 2000); // 20s, 22s, 24s
+      
       const response = await axios.get('https://app.scrapingbee.com/api/v1/', {
         params: {
           api_key: SCRAPINGBEE_API_KEY,
           url: trackingUrl,
           render_js: 'true', // Enable JavaScript rendering
-          wait: '20000', // Wait 20 seconds for Royal Mail's SPA to render
+          wait: waitTime.toString(), // Varying wait time
           premium_proxy: 'true', // Use premium proxies for better success rate
           block_resources: 'false', // Don't block any resources
           window_width: '1920',
           window_height: '1080',
         },
-        timeout: 35000, // 35 second timeout
+        timeout: 40000, // 40 second timeout
       });
 
       html = response.data;
