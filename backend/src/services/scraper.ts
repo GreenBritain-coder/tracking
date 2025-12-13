@@ -140,35 +140,55 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
         await page.keyboard.press('Enter');
       }
       
+      // Add a longer initial wait after clicking (Royal Mail may be slow)
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      // Check current URL to see if navigation happened
+      const currentUrl = page.url();
+      console.log(`[${trackingNumber}] Current URL after click: ${currentUrl}`);
+      
       // Wait for results to load
       let contentLoaded = false;
       for (let i = 0; i < 20; i++) {
         await new Promise(resolve => setTimeout(resolve, 1000));
         
-        const hasResults = await page.evaluate(() => {
+        const pageInfo = await page.evaluate(() => {
           // @ts-ignore
           const bodyText = document.body.innerText || '';
-          return bodyText.includes('We\'ve got it') || 
+          const hasResults = bodyText.includes('We\'ve got it') || 
                  bodyText.includes('expect to deliver') || 
                  bodyText.includes('have your item at') ||
                  bodyText.includes('Tracking number:') ||
                  bodyText.includes('Service used:');
+          
+          return {
+            hasResults,
+            textLength: bodyText.length,
+            snippet: bodyText.substring(0, 200)
+          };
         });
         
-        if (hasResults) {
+        if (pageInfo.hasResults) {
           contentLoaded = true;
-          console.log(`[${trackingNumber}] ✅ Tracking results appeared after ${i + 1} seconds`);
+          console.log(`[${trackingNumber}] ✅ Tracking results appeared after ${i + 3} seconds`);
           await new Promise(resolve => setTimeout(resolve, 2000));
           break;
         }
         
         if ((i + 1) % 5 === 0) {
-          console.log(`[${trackingNumber}] Still waiting for results... (${i + 1}s)`);
+          console.log(`[${trackingNumber}] Still waiting for results... (${i + 3}s) - Text length: ${pageInfo.textLength}`);
         }
       }
       
       if (!contentLoaded) {
-        console.warn(`[${trackingNumber}] ⚠️ Tracking results didn't appear within 20 seconds`);
+        console.warn(`[${trackingNumber}] ⚠️ Tracking results didn't appear within 23 seconds`);
+        // Take a screenshot for debugging (save to /tmp in container)
+        try {
+          await page.screenshot({ path: `/tmp/rm-tracking-${trackingNumber.replace(/\s/g, '')}.png` });
+          console.log(`[${trackingNumber}] Screenshot saved to /tmp/rm-tracking-${trackingNumber.replace(/\s/g, '')}.png`);
+        } catch (e) {
+          console.error(`[${trackingNumber}] Failed to save screenshot:`, e);
+        }
       }
       
     } catch (error) {
