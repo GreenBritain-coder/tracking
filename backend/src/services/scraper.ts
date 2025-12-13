@@ -158,7 +158,24 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
       }
     }
 
-    // PRIORITY 1: Check for DELIVERED status (STRICT - only past tense)
+    // PRIORITY 1: Check for DELIVERED status (VERY STRICT - only past tense AND must have tracking content)
+    // First check: Do we have actual tracking content? If not, don't detect as delivered
+    const hasActualTrackingContent = textContent.length > 800 && (
+      textLower.includes('tracking number:') ||
+      textLower.includes('service used:') ||
+      textLower.includes('we have your item') ||
+      textLower.includes('we\'ve got it')
+    );
+    
+    if (!hasActualTrackingContent) {
+      console.log(`[${trackingNumber}] No actual tracking content found, defaulting to NOT_SCANNED`);
+      return { 
+        status: 'not_scanned', 
+        details: 'No tracking information loaded from Royal Mail',
+        statusHeader: statusHeader || undefined
+      };
+    }
+    
     const deliveredPhrases = [
       'has been delivered',
       'was delivered',
@@ -170,7 +187,7 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
       'delivery successful',
     ];
 
-    const deliveredRegex = /\b(delivered|delivery completed|successfully delivered)\b/i;
+    const deliveredRegex = /\b(has been delivered|was delivered|delivery completed)\b/i;
     const hasDeliveredKeyword = deliveredRegex.test(textLower);
     
     let hasDeliveredPhrase = false;
