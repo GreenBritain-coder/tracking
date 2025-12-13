@@ -38,35 +38,55 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
       // Use slightly different wait times per attempt to avoid patterns
       const waitTime = 18000 + (attempt * 2000); // 20s, 22s, 24s
       
-      const response = await axios.get('https://app.scrapingbee.com/api/v1/', {
-        params: {
-          api_key: SCRAPINGBEE_API_KEY,
-          url: trackingUrl,
-          render_js: 'true', // Enable JavaScript rendering
-          wait: waitTime.toString(), // Varying wait time
-          premium_proxy: 'true', // Use premium proxies for better success rate
-          block_resources: 'false', // Don't block any resources
-          window_width: '1920',
-          window_height: '1080',
-        },
-        timeout: 40000, // 40 second timeout
-      });
+      try {
+        const response = await axios.get('https://app.scrapingbee.com/api/v1/', {
+          params: {
+            api_key: SCRAPINGBEE_API_KEY,
+            url: trackingUrl,
+            render_js: 'true', // Enable JavaScript rendering
+            wait: waitTime.toString(), // Varying wait time
+            premium_proxy: 'true', // Use premium proxies for better success rate
+            block_resources: 'false', // Don't block any resources
+            window_width: '1920',
+            window_height: '1080',
+          },
+          timeout: 40000, // 40 second timeout
+        });
 
-      html = response.data;
-      console.log(`[${trackingNumber}] Received HTML (attempt ${attempt}), length: ${html.length} bytes`);
-      
-      // Quick check: does this look like tracking content?
-      const quickCheck = html.toLowerCase();
-      if (quickCheck.includes('tracking number:') || 
-          quickCheck.includes('we\'ve got it') || 
-          quickCheck.includes('expect to deliver') ||
-          (html.length < 300000 && quickCheck.includes('service used:'))) {
-        console.log(`[${trackingNumber}] Tracking content detected on attempt ${attempt}`);
-        break; // Got good content, stop retrying
-      } else {
-        console.log(`[${trackingNumber}] No tracking content detected on attempt ${attempt}, may retry...`);
-        if (attempt === maxAttempts) {
-          console.warn(`[${trackingNumber}] Failed to get tracking content after ${maxAttempts} attempts`);
+        html = response.data;
+        console.log(`[${trackingNumber}] Received HTML (attempt ${attempt}), length: ${html.length} bytes`);
+        
+        // Quick check: does this look like tracking content?
+        const quickCheck = html.toLowerCase();
+        if (quickCheck.includes('tracking number:') || 
+            quickCheck.includes('we\'ve got it') || 
+            quickCheck.includes('expect to deliver') ||
+            (html.length < 300000 && quickCheck.includes('service used:'))) {
+          console.log(`[${trackingNumber}] Tracking content detected on attempt ${attempt}`);
+          break; // Got good content, stop retrying
+        } else {
+          console.log(`[${trackingNumber}] No tracking content detected on attempt ${attempt}, may retry...`);
+          if (attempt === maxAttempts) {
+            console.warn(`[${trackingNumber}] Failed to get tracking content after ${maxAttempts} attempts`);
+          }
+        }
+      } catch (requestError) {
+        // Handle 503 Service Unavailable (ScrapingBee infrastructure issue)
+        if (axios.isAxiosError(requestError) && requestError.response?.status === 503) {
+          console.warn(`[${trackingNumber}] ScrapingBee returned 503 (Service Unavailable) on attempt ${attempt}`);
+          if (attempt < maxAttempts) {
+            // Exponential backoff for 503s: 5s, 10s, 20s
+            const backoffDelay = 5000 * Math.pow(2, attempt - 1);
+            console.log(`[${trackingNumber}] Waiting ${backoffDelay}ms before retry (exponential backoff for 503)...`);
+            await new Promise(resolve => setTimeout(resolve, backoffDelay));
+            continue; // Retry the request
+          } else {
+            console.error(`[${trackingNumber}] ScrapingBee 503 error persisted after ${maxAttempts} attempts`);
+            throw requestError; // Re-throw to be caught by outer catch
+          }
+        } else {
+          // Other errors - re-throw to be caught by outer catch
+          throw requestError;
         }
       }
     }
