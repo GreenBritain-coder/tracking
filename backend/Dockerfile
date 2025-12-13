@@ -26,7 +26,7 @@ RUN NODE_ENV=development npm install
 COPY src ./src
 
 # Build the application (ensure NODE_ENV is development for build)
-RUN NODE_ENV=development npm run build
+RUN NODE_ENV=development npx tsc
 
 # Expose port
 EXPOSE 3000
