@@ -21,6 +21,8 @@
     "jsonwebtoken": "^9.0.2",
     "node-cron": "^3.0.3",
     "puppeteer": "^21.6.1",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "express-validator": "^7.0.1"
   },
   "devDependencies": {

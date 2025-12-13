@@ -1,22 +1,31 @@
-import puppeteer, { Browser, Page } from 'puppeteer';
+import puppeteer from 'puppeteer';
+import { Browser, Page } from 'puppeteer';
+// @ts-ignore - puppeteer-extra types
+import puppeteerExtra from 'puppeteer-extra';
+// @ts-ignore - stealth plugin types
+import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { TrackingStatus } from '../models/tracking';
+
+// Add stealth plugin to make Puppeteer undetectable
+puppeteerExtra.use(StealthPlugin());
 
 let browser: Browser | null = null;
 
 async function getBrowser(): Promise<Browser> {
   if (!browser) {
-    browser = await puppeteer.launch({
-      headless: 'new', // Use new headless mode (less detectable)
+    browser = await puppeteerExtra.launch({
+      headless: 'new', // Use new headless mode
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
         '--disable-accelerated-2d-canvas',
         '--disable-gpu',
-        '--disable-blink-features=AutomationControlled', // Hide automation
         '--window-size=1920,1080',
       ],
-    });
+      // @ts-ignore - executablePath exists
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+    }) as Browser;
   }
   return browser;
 }
