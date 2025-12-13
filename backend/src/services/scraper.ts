@@ -75,6 +75,7 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
       // If no specific status element found, get page text
       if (!statusText) {
         statusText = await page.evaluate(() => {
+          // @ts-ignore - document is available in browser context
           return document.body.innerText || '';
         });
       }

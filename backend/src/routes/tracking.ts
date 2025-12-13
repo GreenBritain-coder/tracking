@@ -99,7 +99,7 @@ router.post(
     body('tracking_number').notEmpty().trim(),
     body('box_id').optional().isInt(),
   ],
-  async (req: AuthRequest, res) => {
+  async (req: AuthRequest, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
@@ -132,7 +132,7 @@ router.post(
     body('tracking_numbers.*').isString().trim().notEmpty(),
     body('box_id').optional().isInt(),
   ],
-  async (req: AuthRequest, res) => {
+  async (req: AuthRequest, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
