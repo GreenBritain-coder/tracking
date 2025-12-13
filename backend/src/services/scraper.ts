@@ -121,12 +121,17 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
       // Try to extract just the main content area (exclude navigation, buttons, etc.)
       // Look for the main content section
       const mainContent = await page.evaluate(() => {
-        // @ts-ignore
+        // @ts-ignore - document is available in browser context
         const main = document.querySelector('main') || 
+                    // @ts-ignore
                     document.querySelector('[role="main"]') ||
+                    // @ts-ignore
                     document.querySelector('.content') ||
+                    // @ts-ignore
                     document.querySelector('#content') ||
+                    // @ts-ignore
                     document.querySelector('[class*="tracking"]') ||
+                    // @ts-ignore
                     document.querySelector('[class*="result"]');
         return main ? main.innerText : '';
       });
