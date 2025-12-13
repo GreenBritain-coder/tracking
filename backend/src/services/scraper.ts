@@ -90,7 +90,9 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
         const inputs = Array.from(document.querySelectorAll('input[type="text"]'));
         // Find the tracking number input (usually has placeholder or label about tracking)
         const trackingInput = inputs.find(input => {
+          // @ts-ignore
           const placeholder = input.getAttribute('placeholder') || '';
+          // @ts-ignore
           const label = input.getAttribute('aria-label') || '';
           return placeholder.toLowerCase().includes('track') || 
                  placeholder.toLowerCase().includes('reference') ||
@@ -116,6 +118,7 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
         // @ts-ignore
         const buttons = Array.from(document.querySelectorAll('button, input[type="submit"], a[role="button"]'));
         const trackButton = buttons.find(btn => {
+          // @ts-ignore
           const text = btn.textContent || btn.getAttribute('value') || '';
           return text.toLowerCase().includes('track') || 
                  text.toLowerCase().includes('search') ||
