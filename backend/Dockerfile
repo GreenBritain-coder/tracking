@@ -35,6 +35,6 @@ EXPOSE 3000
 # Set NODE_ENV to production for runtime (can be overridden by deployment platform)
 ENV NODE_ENV=production
 
-# Start the application
-CMD ["npm", "start"]
+# Start the application (run migrations first)
+CMD ["sh", "-c", "npm run migrate && npm start"]
 
