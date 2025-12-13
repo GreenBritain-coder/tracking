@@ -8,6 +8,11 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
+# Set environment variables for Puppeteer BEFORE npm install
+# This prevents Puppeteer from downloading Chromium during installation
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+
 # Copy package files
 COPY package*.json ./
 COPY tsconfig.json ./
@@ -25,10 +30,6 @@ RUN NODE_ENV=development npm run build
 
 # Expose port
 EXPOSE 3000
-
-# Set environment variable for Puppeteer
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 # Set NODE_ENV to production for runtime (can be overridden by deployment platform)
 ENV NODE_ENV=production
