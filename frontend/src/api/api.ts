@@ -13,6 +13,7 @@ export interface TrackingNumber {
   tracking_number: string;
   box_id: number | null;
   current_status: 'not_scanned' | 'scanned' | 'delivered';
+  status_details?: string | null;
   created_at: string;
   updated_at: string;
   box_name?: string | null;

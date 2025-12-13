@@ -30,12 +30,14 @@ export async function updateAllTrackingStatuses() {
           try {
             const result = await checkRoyalMailStatus(tn.tracking_number);
             
-            // Only update if status changed
+            // Only update if status changed or statusHeader changed
             if (result.status !== tn.current_status) {
-              await updateTrackingStatus(tn.id, result.status);
+              // Store the statusHeader (like "We've got it") in the status_details field
+              await updateTrackingStatus(tn.id, result.status, result.statusHeader);
               updated++;
               console.log(
-                `Updated ${tn.tracking_number}: ${tn.current_status} -> ${result.status}`
+                `Updated ${tn.tracking_number}: ${tn.current_status} -> ${result.status}`,
+                result.statusHeader ? `Header: ${result.statusHeader}` : ''
               );
             }
             

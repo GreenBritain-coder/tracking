@@ -23,6 +23,7 @@ async function getBrowser(): Promise<Browser> {
 export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
   status: TrackingStatus;
   details?: string;
+  statusHeader?: string;
 }> {
   let page: Page | null = null;
   
@@ -118,6 +119,30 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
         return document.body.innerText || '';
       });
       
+      // Try to extract the status header (like "We've got it", "Item delivered", etc.)
+      const statusHeader = await page.evaluate(() => {
+        // @ts-ignore - document is available in browser context
+        const h1 = document.querySelector('h1');
+        // @ts-ignore
+        const h2 = document.querySelector('h2');
+        // @ts-ignore
+        const h3 = document.querySelector('h3');
+        
+        // Get the first heading that looks like a status
+        const heading = h1 || h2 || h3;
+        if (heading) {
+          const text = heading.innerText?.trim() || '';
+          // Filter out generic headings
+          if (text && 
+              text.length < 100 && 
+              !text.toLowerCase().includes('royal mail') &&
+              !text.toLowerCase().includes('track your item')) {
+            return text;
+          }
+        }
+        return '';
+      });
+      
       // Try to extract just the main content area (exclude navigation, buttons, etc.)
       // Look for the main content section
       const mainContent = await page.evaluate(() => {
@@ -138,6 +163,11 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
       
       // Use main content if we got it, otherwise use all page text
       statusText = mainContent && mainContent.length > 100 ? mainContent : allPageText;
+      
+      // Log extracted header for debugging
+      if (statusHeader) {
+        console.log(`[${trackingNumber}] Extracted status header: ${statusHeader}`);
+      }
       
       // Filter out common UI elements that might be getting picked up
       const uiElements = ['close', 'search', 'clear input', 'menu', 'navigation', 'cookie', 'accept'];
@@ -224,7 +254,11 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
     // If we have ANY future delivery indicator, it's definitely SCANNED, not DELIVERED
     if (hasFutureIndicator) {
       console.log(`[${trackingNumber}] Detected SCANNED status (has future delivery indicator)`);
-      return { status: 'scanned', details: statusText.substring(0, 500) };
+      return { 
+        status: 'scanned', 
+        details: statusText.substring(0, 500),
+        statusHeader: statusHeader || undefined
+      };
     }
     
     // Only check for delivered if we have NO future indicators
@@ -263,7 +297,11 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
     
     if ((hasDeliveredPhrase || hasDeliveredKeyword) && hasNoFutureWords) {
       console.log(`[${trackingNumber}] Detected DELIVERED status`);
-      return { status: 'delivered', details: statusText.substring(0, 500) };
+      return { 
+        status: 'delivered', 
+        details: statusText.substring(0, 500),
+        statusHeader: statusHeader || undefined
+      };
     }
     
     // PRIORITY 2: Check for NOT_SCANNED / NOT FOUND status
@@ -281,7 +319,11 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
     for (const keyword of notScannedKeywords) {
       if (searchText.includes(keyword)) {
         console.log(`[${trackingNumber}] Detected NOT_SCANNED status (keyword: ${keyword})`);
-        return { status: 'not_scanned', details: statusText.substring(0, 500) || 'No tracking information available' };
+        return { 
+          status: 'not_scanned', 
+          details: statusText.substring(0, 500) || 'No tracking information available',
+          statusHeader: statusHeader || undefined
+        };
       }
     }
     
@@ -324,7 +366,11 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
     
     // Only return scanned if we have clear indicators AND substantial content
     if (hasScannedIndicator && statusText.length > 50) {
-      return { status: 'scanned', details: statusText.substring(0, 500) };
+      return { 
+        status: 'scanned', 
+        details: statusText.substring(0, 500),
+        statusHeader: statusHeader || undefined
+      };
     }
     
     // If we have substantial content but no clear indicators, check if it looks like tracking info
@@ -333,18 +379,29 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
       const hasDateOrTime = /\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{1,2}:\d{2}/.test(statusText);
       if (hasDateOrTime) {
         console.log(`[${trackingNumber}] Detected SCANNED status (has tracking info with dates)`);
-        return { status: 'scanned', details: statusText.substring(0, 500) };
+        return { 
+          status: 'scanned', 
+          details: statusText.substring(0, 500),
+          statusHeader: statusHeader || undefined
+        };
       }
     }
     
     // Default: if we can't determine, return not_scanned (safer than assuming scanned)
     console.log(`[${trackingNumber}] Unable to determine status, defaulting to NOT_SCANNED`);
-    return { status: 'not_scanned', details: statusText.substring(0, 500) || 'Unable to determine status from page content' };
+    return { 
+      status: 'not_scanned', 
+      details: statusText.substring(0, 500) || 'Unable to determine status from page content',
+      statusHeader: statusHeader || undefined
+    };
     
   } catch (error) {
     console.error(`Error checking status for ${trackingNumber}:`, error);
     // On error, return not_scanned (safer default)
-    return { status: 'not_scanned', details: `Error: ${error instanceof Error ? error.message : 'Unknown error'}` };
+    return { 
+      status: 'not_scanned', 
+      details: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+    };
   } finally {
     if (page) {
       await page.close();

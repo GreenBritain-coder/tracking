@@ -188,6 +188,7 @@ export default function Dashboard() {
           <thead>
             <tr>
               <th>Status</th>
+              <th>Status Details</th>
               <th>Tracking Number</th>
               <th>Box</th>
               <th>Created</th>
@@ -198,7 +199,7 @@ export default function Dashboard() {
           <tbody>
             {trackingNumbers.length === 0 ? (
               <tr>
-                <td colSpan={6} className="empty-state">
+                <td colSpan={7} className="empty-state">
                   No tracking numbers found
                 </td>
               </tr>
@@ -213,6 +214,7 @@ export default function Dashboard() {
                       {STATUS_EMOJIS[tn.current_status]} {STATUS_LABELS[tn.current_status]}
                     </span>
                   </td>
+                  <td className="status-details">{tn.status_details || '-'}</td>
                   <td className="tracking-number">{tn.tracking_number}</td>
                   <td>{tn.box_name || '-'}</td>
                   <td>{formatDate(tn.created_at)}</td>

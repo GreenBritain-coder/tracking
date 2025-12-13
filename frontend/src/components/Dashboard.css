@@ -160,6 +160,16 @@
   font-weight: 500;
 }
 
+.status-details {
+  font-style: italic;
+  color: #555;
+  font-size: 0.9rem;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .delete-btn {
   background-color: #e74c3c;
   color: white;

@@ -28,9 +28,23 @@ async function migrate() {
         tracking_number VARCHAR(255) UNIQUE NOT NULL,
         box_id INTEGER REFERENCES boxes(id) ON DELETE SET NULL,
         current_status VARCHAR(20) DEFAULT 'not_scanned' CHECK (current_status IN ('not_scanned', 'scanned', 'delivered')),
+        status_details TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
+    `);
+
+    // Add status_details column if it doesn't exist (for existing databases)
+    await pool.query(`
+      DO $$ 
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name='tracking_numbers' AND column_name='status_details'
+        ) THEN
+          ALTER TABLE tracking_numbers ADD COLUMN status_details TEXT;
+        END IF;
+      END $$;
     `);
 
     // Create status_history table

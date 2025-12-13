@@ -7,6 +7,7 @@ export interface TrackingNumber {
   tracking_number: string;
   box_id: number | null;
   current_status: TrackingStatus;
+  status_details: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -77,7 +78,8 @@ export async function getTrackingNumberById(id: number): Promise<TrackingNumber 
 
 export async function updateTrackingStatus(
   id: number,
-  status: TrackingStatus
+  status: TrackingStatus,
+  statusDetails?: string
 ): Promise<TrackingNumber | null> {
   const client = await pool.connect();
   try {
@@ -86,10 +88,10 @@ export async function updateTrackingStatus(
     // Update tracking number
     const updateResult = await client.query(
       `UPDATE tracking_numbers 
-       SET current_status = $1, updated_at = CURRENT_TIMESTAMP 
-       WHERE id = $2 
+       SET current_status = $1, status_details = $2, updated_at = CURRENT_TIMESTAMP 
+       WHERE id = $3 
        RETURNING *`,
-      [status, id]
+      [status, statusDetails || null, id]
     );
     
     if (updateResult.rows.length === 0) {
