@@ -257,16 +257,46 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
       }
       
       // Step 2: Get tracking information
-      console.log(`[${trackingNumber}] Getting tracking information from TrackingMore with courier code: ${courierCode}...`);
-      const getResponse = await axios.get(
-        `${TRACKINGMORE_API_BASE}/trackings/${courierCode}/${cleanTrackingNumber}`,
-        {
-          headers: {
-            'Tracking-Api-Key': TRACKINGMORE_API_KEY,
-          },
-          timeout: 30000,
+      // Wait a moment for TrackingMore to process the tracking
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      console.log(`[${trackingNumber}] Getting tracking information from TrackingMore...`);
+      // Try GET with just tracking_number first (after creation, courier_code may not be needed)
+      let getResponse;
+      try {
+        getResponse = await axios.get(
+          `${TRACKINGMORE_API_BASE}/trackings/get`,
+          {
+            params: {
+              tracking_number: cleanTrackingNumber,
+            },
+            headers: {
+              'Tracking-Api-Key': TRACKINGMORE_API_KEY,
+            },
+            timeout: 30000,
+          }
+        );
+      } catch (getError) {
+        // If that fails, try with courier_code
+        if (axios.isAxiosError(getError) && getError.response?.status === 400) {
+          console.log(`[${trackingNumber}] Trying GET with courier_code...`);
+          getResponse = await axios.get(
+            `${TRACKINGMORE_API_BASE}/trackings/get`,
+            {
+              params: {
+                tracking_number: cleanTrackingNumber,
+                courier_code: courierCode,
+              },
+              headers: {
+                'Tracking-Api-Key': TRACKINGMORE_API_KEY,
+              },
+              timeout: 30000,
+            }
+          );
+        } else {
+          throw getError;
         }
-      );
+      }
       
       if (getResponse.data) {
         console.log(`[${trackingNumber}] Successfully fetched from TrackingMore`);
