@@ -153,41 +153,58 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
           html = response.data;
           console.log(`[${trackingNumber}] Received HTML (attempt ${attempt}), length: ${html.length} bytes`);
           
-          // Quick check: Extract a sample of text to verify it's tracking content, not search form
-          // Remove HTML tags to get plain text sample
-          const textSample = html
+          // Extract text from HTML (remove scripts, styles, tags)
+          const fullTextSample = html
             .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
             .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
             .replace(/<[^>]+>/g, ' ')
             .replace(/\s+/g, ' ')
-            .toLowerCase()
-            .substring(0, 2000); // First 2000 chars should be enough
+            .toLowerCase();
           
-          // Check for actual tracking results (not search form)
+          // Get a sample for logging (first 1000 chars)
+          const textSampleForLog = fullTextSample.substring(0, 1000);
+          console.log(`[${trackingNumber}] Text sample (first 1000 chars): ${textSampleForLog}`);
+          
+          // Check for actual tracking results (not search form) - check FULL HTML, not just sample
+          // Make keywords more flexible (removed colons, added variations)
           const hasTrackingResults = (
-            (textSample.includes('tracking number:') && textSample.includes('service used:')) ||
-            textSample.includes('we\'ve got it') || 
-            textSample.includes('expect to deliver') ||
-            (textSample.includes('delivered') && textSample.includes('tracking number:')) ||
-            (textSample.includes('your item was delivered') && textSample.includes('tracking number:'))
+            (fullTextSample.includes('tracking number') && fullTextSample.includes('service used')) ||
+            fullTextSample.includes('we\'ve got it') || 
+            fullTextSample.includes('we have your item') ||
+            fullTextSample.includes('expect to deliver') ||
+            fullTextSample.includes('on its way') ||
+            (fullTextSample.includes('delivered') && fullTextSample.includes('tracking number')) ||
+            (fullTextSample.includes('your item was delivered') && fullTextSample.includes('tracking number')) ||
+            fullTextSample.includes('tracking information') ||
+            fullTextSample.includes('item status') ||
+            fullTextSample.includes('mailpiece') ||
+            fullTextSample.includes('parcel status')
           );
           
-          // Check that it's NOT the search form (search form has "your reference number*" but no actual tracking data)
-          const isSearchForm = textSample.includes('your reference number*') && 
-                              !textSample.includes('tracking number:') &&
-                              !textSample.includes('we\'ve got it') &&
-                              !textSample.includes('delivered') &&
-                              !textSample.includes('service used:');
+          // Check that it's NOT the search form (search form has "your reference number" but no actual tracking data)
+          const isSearchForm = (fullTextSample.includes('your reference number') || 
+                              fullTextSample.includes('enter your tracking number')) && 
+                              !fullTextSample.includes('tracking number') &&
+                              !fullTextSample.includes('we\'ve got it') &&
+                              !fullTextSample.includes('delivered') &&
+                              !fullTextSample.includes('service used') &&
+                              !fullTextSample.includes('item status');
+          
+          // Enhanced debug logging
+          console.log(`[${trackingNumber}] Content detection results:`);
+          console.log(`[${trackingNumber}] - Has tracking results: ${hasTrackingResults}`);
+          console.log(`[${trackingNumber}] - Is search form: ${isSearchForm}`);
+          console.log(`[${trackingNumber}] - Full text length: ${fullTextSample.length} chars`);
           
           if (hasTrackingResults && !isSearchForm) {
-            console.log(`[${trackingNumber}] Tracking content detected on attempt ${attempt} with URL: ${trackingUrl}`);
+            console.log(`[${trackingNumber}] ✅ Tracking content detected on attempt ${attempt} with URL: ${trackingUrl}`);
             foundContent = true;
             break outerLoop; // Got good content, stop retrying
           } else {
             if (isSearchForm) {
-              console.log(`[${trackingNumber}] Search form detected with URL: ${trackingUrl}, trying next URL format...`);
+              console.log(`[${trackingNumber}] ❌ Search form detected with URL: ${trackingUrl}, trying next URL format...`);
             } else {
-              console.log(`[${trackingNumber}] No tracking content detected with URL: ${trackingUrl}, trying next URL format...`);
+              console.log(`[${trackingNumber}] ❌ No tracking content detected with URL: ${trackingUrl}, trying next URL format...`);
             }
             // Continue to next URL format
           }
