@@ -46,8 +46,9 @@ function parseTrackingMoreResponse(data: any, trackingNumber: string): {
       };
     }
     
-    // Try different status field names
-    const statusText = trackingData?.status || 
+    // Try different status field names - new API uses delivery_status
+    const statusText = trackingData?.delivery_status ||
+                      trackingData?.status || 
                       trackingData?.latest_status || 
                       trackingData?.lastEvent || 
                       trackingData?.last_event ||
@@ -56,15 +57,19 @@ function parseTrackingMoreResponse(data: any, trackingNumber: string): {
     const statusLower = statusText.toLowerCase();
     
     // Extract status header/description
-    const statusHeader = trackingData?.latest_status || 
+    const statusHeader = trackingData?.delivery_status ||
+                        trackingData?.latest_status || 
                         trackingData?.status || 
                         trackingData?.lastEvent ||
                         trackingData?.last_event ||
                         trackingData?.sub_status ||
+                        trackingData?.substatus ||
                         statusText;
     
     // Extract details from tracking events - try multiple possible paths
+    // New API structure: origin_info.trackinfo is an array
     const events = trackingData?.origin_info?.trackinfo || 
+                   trackingData?.destination_info?.trackinfo ||
                    trackingData?.tracking_info || 
                    trackingData?.trackinfo ||
                    trackingData?.events ||
@@ -80,10 +85,11 @@ function parseTrackingMoreResponse(data: any, trackingNumber: string): {
       : JSON.stringify(trackingData).substring(0, 500);
     
     // Check if tracking exists but has no status yet (pending)
-    if (!statusText && !events.length && trackingData) {
+    // New API: delivery_status can be "pending" with empty trackinfo
+    if ((!statusText || statusLower === 'pending') && !events.length && trackingData) {
       // If we have tracking data but no status/events, it might be pending
       console.log(`[${trackingNumber}] TrackingMore: Has tracking data but no status yet, checking for pending state`);
-      if (trackingData.tracking_number || trackingData.courier_code) {
+      if (trackingData.tracking_number || trackingData.courier_code || trackingData.id) {
         // Tracking was created but not yet scanned by courier
         return {
           status: 'not_scanned',
@@ -177,8 +183,8 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
     
     try {
       // Step 1: Create tracking in TrackingMore (if not already exists)
-      // Try different courier codes for Royal Mail
-      const courierCodes = ['royalmail', 'royal-mail'];
+      // Try different courier codes for Royal Mail - prioritize royal-mail (works per curl example)
+      const courierCodes = ['royal-mail', 'royalmail'];
       let courierCode = courierCodes[0];
       let trackingCreated = false;
       
@@ -188,89 +194,50 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
           const requestBody = {
             tracking_number: cleanTrackingNumber,
             courier_code: code,
-            // Add optional fields that might help with creation
-            order_id: cleanTrackingNumber, // Use tracking number as order ID
-            title: `Royal Mail Tracking ${cleanTrackingNumber}`,
           };
           
-          // Try /shipments endpoint first (this creates shipments visible in dashboard)
-          let createResponse;
-          let usedShipmentsEndpoint = false;
-          
-          try {
-            createResponse = await axios.post(
-              `${TRACKINGMORE_API_BASE}/shipments`,
-              requestBody,
-              {
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Tracking-Api-Key': TRACKINGMORE_API_KEY,
-                },
-                timeout: 30000,
-              }
-            );
-            usedShipmentsEndpoint = true;
-            console.log(`[${trackingNumber}] Created via /shipments endpoint`);
-          } catch (shipmentsError) {
-            // If /shipments fails, fall back to /trackings endpoint
-            if (axios.isAxiosError(shipmentsError) && shipmentsError.response) {
-              console.log(`[${trackingNumber}] /shipments endpoint failed (${shipmentsError.response.status}), trying /trackings endpoint...`);
+          // Use the correct endpoint: /trackings/create
+          const createResponse = await axios.post(
+            `${TRACKINGMORE_API_BASE}/trackings/create`,
+            requestBody,
+            {
+              headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'Tracking-Api-Key': TRACKINGMORE_API_KEY,
+              },
+              timeout: 30000,
             }
-            createResponse = await axios.post(
-              `${TRACKINGMORE_API_BASE}/trackings`,
-              requestBody,
-              {
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Tracking-Api-Key': TRACKINGMORE_API_KEY,
-                },
-                timeout: 30000,
-              }
-            );
-            console.log(`[${trackingNumber}] Created via /trackings endpoint`);
-          }
+          );
+          console.log(`[${trackingNumber}] Created via /trackings/create endpoint`);
           console.log(`[${trackingNumber}] POST response status: ${createResponse.status}`);
           console.log(`[${trackingNumber}] POST response body:`, JSON.stringify(createResponse.data, null, 2).substring(0, 1000));
           
-          // Check meta.code in response - 200 means success, but check if there are any warnings
+          // Check meta.code in response - 200 means success
           const metaCode = createResponse.data?.meta?.code;
           const metaMessage = createResponse.data?.meta?.message || '';
           
           if (metaCode === 200) {
-            // Check if data is empty - this might mean it was accepted but not created
-            if (!createResponse.data?.data || 
-                (Array.isArray(createResponse.data.data) && createResponse.data.data.length === 0)) {
-              console.warn(`[${trackingNumber}] POST returned 200 with empty data - shipment may not have been created`);
-              console.warn(`[${trackingNumber}] This could indicate: API key lacks create permissions, or shipment needs time to appear`);
+            // Check if data exists - new API returns data object with id, tracking_number, etc.
+            if (createResponse.data?.data) {
+              const dataObj = createResponse.data.data;
+              // Check if it's an object with tracking info (new API format)
+              if (!Array.isArray(dataObj) && (dataObj.id || dataObj.tracking_number)) {
+                console.log(`[${trackingNumber}] Tracking successfully created in TrackingMore with courier code: ${code}`);
+                // Use the response data directly - it contains the tracking info
+                return parseTrackingMoreResponse(createResponse.data, trackingNumber);
+              } else if (Array.isArray(dataObj) && dataObj.length > 0) {
+                // Array format (old API)
+                console.log(`[${trackingNumber}] Tracking created/updated (200) in TrackingMore with courier code: ${code}`);
+                return parseTrackingMoreResponse(createResponse.data, trackingNumber);
+              } else {
+                console.warn(`[${trackingNumber}] POST returned 200 but data is empty or invalid`);
+              }
             } else {
-              console.log(`[${trackingNumber}] Shipment created/updated (200) in TrackingMore with courier code: ${code}`);
+              console.warn(`[${trackingNumber}] POST returned 200 but no data field`);
             }
           } else {
             console.warn(`[${trackingNumber}] POST returned meta.code ${metaCode}: ${metaMessage}`);
-          }
-          
-          // Check if tracking was actually created (201 Created) vs just accepted (200 OK)
-          if (createResponse.status === 201) {
-            console.log(`[${trackingNumber}] Shipment successfully CREATED (201) in TrackingMore with courier code: ${code}`);
-          }
-          
-          // Check if POST response contains actual tracking data (not just empty array)
-          if (createResponse.data?.data) {
-            if (Array.isArray(createResponse.data.data) && createResponse.data.data.length > 0) {
-              // Array with items - has tracking data
-              console.log(`[${trackingNumber}] POST response contains tracking data array, using it directly`);
-              return parseTrackingMoreResponse(createResponse.data, trackingNumber);
-            } else if (!Array.isArray(createResponse.data.data) && Object.keys(createResponse.data.data).length > 0) {
-              // Object with properties - has tracking data
-              console.log(`[${trackingNumber}] POST response contains tracking data object, using it directly`);
-              return parseTrackingMoreResponse(createResponse.data, trackingNumber);
-            } else {
-              // Empty array or empty object - tracking created but not scanned yet
-              console.log(`[${trackingNumber}] POST response is empty - tracking created but not yet scanned`);
-            }
-          } else {
-            // No data field - tracking created but not scanned yet
-            console.log(`[${trackingNumber}] POST response has no data - tracking created but not yet scanned`);
           }
           
           courierCode = code;
