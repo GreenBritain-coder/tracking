@@ -58,14 +58,30 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
         
         // Quick check: does this look like tracking content?
         const quickCheck = html.toLowerCase();
-        if (quickCheck.includes('tracking number:') || 
-            quickCheck.includes('we\'ve got it') || 
-            quickCheck.includes('expect to deliver') ||
-            (html.length < 300000 && quickCheck.includes('service used:'))) {
+        // Check for actual tracking results (not search form)
+        const hasTrackingResults = (
+          (quickCheck.includes('tracking number:') && quickCheck.includes('service used:')) ||
+          quickCheck.includes('we\'ve got it') || 
+          quickCheck.includes('expect to deliver') ||
+          (quickCheck.includes('delivered') && quickCheck.includes('tracking number:')) ||
+          (html.length < 300000 && quickCheck.includes('service used:'))
+        );
+        
+        // Also check that it's NOT the search form
+        const isSearchForm = quickCheck.includes('your reference number*') && 
+                            !quickCheck.includes('tracking number:') &&
+                            !quickCheck.includes('we\'ve got it') &&
+                            !quickCheck.includes('delivered');
+        
+        if (hasTrackingResults && !isSearchForm) {
           console.log(`[${trackingNumber}] Tracking content detected on attempt ${attempt}`);
           break; // Got good content, stop retrying
         } else {
-          console.log(`[${trackingNumber}] No tracking content detected on attempt ${attempt}, may retry...`);
+          if (isSearchForm) {
+            console.log(`[${trackingNumber}] Search form detected on attempt ${attempt} (not tracking results), retrying...`);
+          } else {
+            console.log(`[${trackingNumber}] No tracking content detected on attempt ${attempt}, may retry...`);
+          }
           if (attempt === maxAttempts) {
             console.warn(`[${trackingNumber}] Failed to get tracking content after ${maxAttempts} attempts`);
           }
