@@ -114,29 +114,36 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
     try {
       console.log(`[${trackingNumber}] Step 1: Getting cookies from main page...`);
       const mainPageUrl = 'https://www.royalmail.com/track-your-item';
+      // JavaScript to accept cookies - try multiple selectors
       const cookieAcceptJs = `
-        (async function() {
-          await new Promise(resolve => setTimeout(resolve, 2000));
+        (function() {
+          // Try the specific selector first
+          const btn = document.querySelector('button[data-accept-cookies]');
+          if (btn) {
+            btn.click();
+            return;
+          }
+          // Fallback: find by text content
           const buttons = Array.from(document.querySelectorAll('button, a, [role="button"]'));
           for (const btn of buttons) {
             const text = (btn.textContent || btn.innerText || '').toLowerCase().trim();
             if ((text.includes('accept') || text.includes('continue') || text === 'ok') && 
                 text.length < 30 && btn.offsetParent !== null) {
-              try {
-                btn.click();
-                await new Promise(resolve => setTimeout(resolve, 2000));
-                break;
-              } catch(e) {}
+              btn.click();
+              break;
             }
           }
         })();
       `.trim();
       
+      // Base64 encode the JavaScript snippet (ScrapingAnt requires base64 for js_snippet)
+      const jsSnippetBase64 = Buffer.from(cookieAcceptJs).toString('base64');
+      
       const cookieResponse = await axios.get('https://api.scrapingant.com/v2/general', {
         params: {
           url: mainPageUrl,
           browser: 'true',
-          js_code: cookieAcceptJs,
+          js_snippet: jsSnippetBase64, // Use js_snippet with base64 encoding
           wait: '10000', // 10 seconds: 2s initial + 2s cookie click + 6s for cookies to be set
           proxy_country: 'GB',
         },
@@ -160,7 +167,7 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
     } catch (cookieError) {
       console.warn(`[${trackingNumber}] ⚠️ Failed to get cookies from main page:`, 
         axios.isAxiosError(cookieError) ? cookieError.message : 'Unknown error');
-      // Continue without cookies - will try with js_code instead
+      // Continue without cookies - will try with js_snippet instead
     }
     
     // Try multiple URL formats - Hash-based works (user confirmed modal appears then shows tracking)
@@ -221,69 +228,35 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
           // ScrapingAnt API: https://api.scrapingant.com/v2/general
           // Uses x-api-key in headers (not query parameter)
           // browser=true enables JavaScript rendering
-          // js_code parameter executes JavaScript (plain text, not base64)
+          // js_snippet parameter executes JavaScript (base64 encoded)
           const isHashBased = trackingUrl.includes('#/tracking-results/');
           
           // JavaScript to accept cookie modal and navigate to tracking results
-          // ScrapingAnt's js_code accepts plain JavaScript (not base64 encoded)
+          // ScrapingAnt's js_snippet requires base64 encoding
           const jsCode = `
-            (async function() {
-              // Wait for page to load
-              await new Promise(resolve => setTimeout(resolve, 2000));
-              
-              // Try multiple selectors for cookie accept button
-              const selectors = [
-                'button[aria-label*="Accept" i]',
-                'button[aria-label*="Continue" i]',
-                'a[aria-label*="Accept" i]',
-                'a[aria-label*="Continue" i]',
-                '[role="button"][aria-label*="Accept" i]',
-                '[role="button"][aria-label*="Continue" i]',
-                'button[id*="accept" i]',
-                'button[id*="continue" i]',
-                'button[class*="accept" i]',
-                'button[class*="continue" i]',
-                'a[id*="accept" i]',
-                'a[id*="continue" i]'
-              ];
-              
-              let clicked = false;
-              for (const selector of selectors) {
-                try {
-                  const btn = document.querySelector(selector);
-                  if (btn && btn.offsetParent !== null) { // Check if visible
-                    btn.click();
-                    clicked = true;
-                    await new Promise(resolve => setTimeout(resolve, 2000));
-                    break;
-                  }
-                } catch(e) {}
-              }
-              
-              // Fallback: find by text content (more reliable)
-              if (!clicked) {
+            (function() {
+              // Try the specific selector first
+              const btn = document.querySelector('button[data-accept-cookies]');
+              if (btn) {
+                btn.click();
+              } else {
+                // Fallback: find by text content
                 const buttons = Array.from(document.querySelectorAll('button, a, [role="button"]'));
                 for (const btn of buttons) {
                   const text = (btn.textContent || btn.innerText || '').toLowerCase().trim();
                   if ((text.includes('accept') || text.includes('continue') || text === 'ok') && 
-                      text.length < 30 && btn.offsetParent !== null) { // Check if visible
-                    try {
-                      btn.click();
-                      clicked = true;
-                      await new Promise(resolve => setTimeout(resolve, 2000));
-                      break;
-                    } catch(e) {}
+                      text.length < 30 && btn.offsetParent !== null) {
+                    btn.click();
+                    break;
                   }
                 }
               }
-              
-              // For hash-based URLs, ensure hash is set after accepting cookies
-              if (${isHashBased ? 'true' : 'false'}) {
-                window.location.hash = '#/tracking-results/${cleanTrackingNumber}';
-                await new Promise(resolve => setTimeout(resolve, 3000));
-              }
+              ${isHashBased ? `window.location.hash = '#/tracking-results/${cleanTrackingNumber}';` : ''}
             })();
           `.trim();
+          
+          // Base64 encode the JavaScript snippet
+          const jsSnippetBase64 = Buffer.from(jsCode).toString('base64');
           
           // Build params object (API key goes in headers, not params)
           const params: any = {
@@ -298,9 +271,9 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
             params.cookies = cookies;
             console.log(`[${trackingNumber}] Using cookies from initial request`);
           } else {
-            // Fallback: use JavaScript to accept cookies if we don't have them
-            params.js_code = jsCode;
-            console.log(`[${trackingNumber}] Using JavaScript to accept cookies (no cookies available)`);
+            // Fallback: use js_snippet to accept cookies if we don't have them
+            params.js_snippet = jsSnippetBase64;
+            console.log(`[${trackingNumber}] Using js_snippet to accept cookies (no cookies available)`);
           }
           
           const response = await axios.get('https://api.scrapingant.com/v2/general', {
@@ -763,3 +736,5 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
 export async function closeBrowser(): Promise<void> {
   // No-op - ScrapingAnt is API-based
 }
+
+
