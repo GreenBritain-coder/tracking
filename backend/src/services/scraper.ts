@@ -253,25 +253,37 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
                                    textLower.includes('delivered') && textLower.includes('tracking number:');
     
     // Validation: Do we have actual tracking content?
-    // For delivered pages, accept shorter content (600+ chars) since they're simpler
-    // For other pages, require more content (800+ chars) to avoid false positives
-    const minLength = hasDeliveredIndicator ? 600 : 800;
-    const hasActualTrackingContent = textContent.length > minLength && (
-      textLower.includes('tracking number:') ||
-      textLower.includes('service used:') ||
-      textLower.includes('we have your item') ||
-      textLower.includes('we\'ve got it') ||
-      textLower.includes('delivered') // Delivered pages have "delivered" + tracking number
-    );
+    // Real tracking pages have "Tracking number:" label (either delivered or in-transit)
+    // Search form does NOT have this
+    const hasTrackingNumberLabel = textLower.includes('tracking number:');
+    const hasServiceUsedLabel = textLower.includes('service used:');
     
-    if (!hasActualTrackingContent) {
-      console.log(`[${trackingNumber}] No actual tracking content found (length: ${textContent.length}, min: ${minLength}), defaulting to NOT_SCANNED`);
+    // If we have these labels, it's definitely tracking content regardless of length
+    if (hasTrackingNumberLabel && hasServiceUsedLabel) {
+      console.log(`[${trackingNumber}] Validated: Has tracking labels (length: ${textContent.length})`);
+      // Continue to status detection
+    } else if (textContent.length < 700) {
+      // Short content without tracking labels = search form or error
+      console.log(`[${trackingNumber}] No actual tracking content found (length: ${textContent.length}, no tracking labels), defaulting to NOT_SCANNED`);
+      return { 
+        status: 'not_scanned', 
+        details: 'No tracking information loaded from Royal Mail',
+        statusHeader: statusHeader || undefined
+      };
+    } else if (!textLower.includes('we\'ve got it') && 
+               !textLower.includes('expect to deliver') &&
+               !textLower.includes('delivered') &&
+               !textLower.includes('on its way')) {
+      // Medium length but no tracking-related keywords = likely search form
+      console.log(`[${trackingNumber}] No tracking keywords found despite length ${textContent.length}, defaulting to NOT_SCANNED`);
       return { 
         status: 'not_scanned', 
         details: 'No tracking information loaded from Royal Mail',
         statusHeader: statusHeader || undefined
       };
     }
+    
+    console.log(`[${trackingNumber}] Validation passed, proceeding with status detection...`);
 
     const deliveredRegex = /\b(has been delivered|was delivered|delivery completed)\b/i;
     const hasDeliveredKeyword = deliveredRegex.test(textLower);
