@@ -193,17 +193,42 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
             title: `Royal Mail Tracking ${cleanTrackingNumber}`,
           };
           
-          const createResponse = await axios.post(
-            `${TRACKINGMORE_API_BASE}/trackings`,
-            requestBody,
-            {
-              headers: {
-                'Content-Type': 'application/json',
-                'Tracking-Api-Key': TRACKINGMORE_API_KEY,
-              },
-              timeout: 30000,
+          // Try /shipments endpoint first (this creates shipments visible in dashboard)
+          let createResponse;
+          let usedShipmentsEndpoint = false;
+          
+          try {
+            createResponse = await axios.post(
+              `${TRACKINGMORE_API_BASE}/shipments`,
+              requestBody,
+              {
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Tracking-Api-Key': TRACKINGMORE_API_KEY,
+                },
+                timeout: 30000,
+              }
+            );
+            usedShipmentsEndpoint = true;
+            console.log(`[${trackingNumber}] Created via /shipments endpoint`);
+          } catch (shipmentsError) {
+            // If /shipments fails, fall back to /trackings endpoint
+            if (axios.isAxiosError(shipmentsError) && shipmentsError.response) {
+              console.log(`[${trackingNumber}] /shipments endpoint failed (${shipmentsError.response.status}), trying /trackings endpoint...`);
             }
-          );
+            createResponse = await axios.post(
+              `${TRACKINGMORE_API_BASE}/trackings`,
+              requestBody,
+              {
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Tracking-Api-Key': TRACKINGMORE_API_KEY,
+                },
+                timeout: 30000,
+              }
+            );
+            console.log(`[${trackingNumber}] Created via /trackings endpoint`);
+          }
           console.log(`[${trackingNumber}] POST response status: ${createResponse.status}`);
           console.log(`[${trackingNumber}] POST response body:`, JSON.stringify(createResponse.data, null, 2).substring(0, 1000));
           
