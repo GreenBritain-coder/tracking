@@ -5,67 +5,6 @@ const TRACKINGMORE_API_KEY = process.env.TRACKINGMORE_API_KEY || '';
 const TRACKINGMORE_API_BASE = 'https://api.trackingmore.com/v4';
 
 /**
- * Parse JSON API response from Royal Mail's microsummary endpoint
- */
-function parseJsonApiResponse(data: any, trackingNumber: string): {
-  status: TrackingStatus;
-  details?: string;
-  statusHeader?: string;
-} {
-  try {
-    // Extract status from the JSON response
-    // The API structure may vary, so we'll check common fields
-    const statusText = data?.status || data?.summary?.status || data?.mailPieces?.[0]?.status || '';
-    const statusLower = statusText.toLowerCase();
-    
-    // Extract status header/description
-    const statusHeader = data?.summary?.description || 
-                        data?.mailPieces?.[0]?.summary || 
-                        data?.statusDescription || 
-                        statusText;
-    
-    // Extract details
-    const details = JSON.stringify(data).substring(0, 500);
-    
-    // Map API status to our TrackingStatus enum
-    if (statusLower.includes('delivered') || statusLower.includes('delivery completed')) {
-      console.log(`[${trackingNumber}] JSON API: Detected DELIVERED status`);
-      return {
-        status: 'delivered',
-        details,
-        statusHeader: statusHeader || 'Delivered',
-      };
-    } else if (statusLower.includes('in transit') || 
-               statusLower.includes('on its way') ||
-               statusLower.includes('collected') ||
-               statusLower.includes('accepted') ||
-               statusLower.includes('processed') ||
-               statusLower.includes('scanned') ||
-               statusLower.includes('we\'ve got it')) {
-      console.log(`[${trackingNumber}] JSON API: Detected SCANNED status`);
-      return {
-        status: 'scanned',
-        details,
-        statusHeader: statusHeader || 'In Transit',
-      };
-    } else {
-      console.log(`[${trackingNumber}] JSON API: Defaulting to NOT_SCANNED (status: ${statusText})`);
-      return {
-        status: 'not_scanned',
-        details,
-        statusHeader: statusHeader || 'Not Scanned',
-      };
-    }
-  } catch (error) {
-    console.error(`[${trackingNumber}] Error parsing JSON API response:`, error);
-    return {
-      status: 'not_scanned',
-      details: 'Error parsing JSON API response',
-    };
-  }
-}
-
-/**
  * Parse TrackingMore API response
  */
 function parseTrackingMoreResponse(data: any, trackingNumber: string): {
@@ -195,36 +134,12 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
   statusHeader?: string;
 }> {
   try {
-    // First, try the JSON API endpoint (much more reliable than scraping HTML)
-    console.log(`[${trackingNumber}] Trying JSON API endpoint...`);
-    try {
-      const apiUrl = `https://api-web.royalmail.com/mailpieces/microsummary/v1/summary/${trackingNumber}`;
-      const apiResponse = await axios.get(apiUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'application/json',
-          'Accept-Language': 'en-GB,en;q=0.9',
-          'Referer': 'https://www.royalmail.com/track-your-item',
-          'Origin': 'https://www.royalmail.com',
-        },
-        timeout: 15000,
-      });
-
-      if (apiResponse.data) {
-        console.log(`[${trackingNumber}] Successfully fetched from JSON API`);
-        return parseJsonApiResponse(apiResponse.data, trackingNumber);
-      }
-    } catch (apiError) {
-      console.log(`[${trackingNumber}] JSON API failed, falling back to TrackingMore:`, 
-        axios.isAxiosError(apiError) ? apiError.message : 'Unknown error');
-    }
-
-    // Fall back to TrackingMore if JSON API fails
+    // Use TrackingMore API
     if (!TRACKINGMORE_API_KEY) {
       console.error('TrackingMore API key not configured');
       return { 
         status: 'not_scanned', 
-        details: 'Both JSON API and TrackingMore failed' 
+        details: 'TrackingMore API key not configured' 
       };
     }
 
@@ -266,26 +181,36 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
             if (Array.isArray(createResponse.data.data) && createResponse.data.data.length > 0) {
               // Array with items - has tracking data
               console.log(`[${trackingNumber}] POST response contains tracking data array, using it directly`);
-              console.log(`[${trackingNumber}] Response structure:`, JSON.stringify(createResponse.data, null, 2).substring(0, 1000));
               return parseTrackingMoreResponse(createResponse.data, trackingNumber);
             } else if (!Array.isArray(createResponse.data.data) && Object.keys(createResponse.data.data).length > 0) {
               // Object with properties - has tracking data
               console.log(`[${trackingNumber}] POST response contains tracking data object, using it directly`);
-              console.log(`[${trackingNumber}] Response structure:`, JSON.stringify(createResponse.data, null, 2).substring(0, 1000));
               return parseTrackingMoreResponse(createResponse.data, trackingNumber);
             } else {
-              // Empty array or empty object - need to GET the data
-              console.log(`[${trackingNumber}] POST response is empty, will fetch tracking data via GET`);
+              // Empty array or empty object - tracking created but not scanned yet
+              console.log(`[${trackingNumber}] POST response is empty - tracking created but not yet scanned`);
             }
+          } else {
+            // No data field - tracking created but not scanned yet
+            console.log(`[${trackingNumber}] POST response has no data - tracking created but not yet scanned`);
           }
           
           courierCode = code;
           trackingCreated = true;
           break;
         } catch (createError) {
-          // If tracking already exists (409), that's fine - continue to get tracking
+          // If tracking already exists (409), check if response has data we can use
           if (axios.isAxiosError(createError) && createError.response?.status === 409) {
             console.log(`[${trackingNumber}] Tracking already exists in TrackingMore with courier code: ${code}`);
+            // Check if 409 response includes tracking data
+            const errorData = createError.response.data;
+            if (errorData?.data) {
+              if ((Array.isArray(errorData.data) && errorData.data.length > 0) ||
+                  (!Array.isArray(errorData.data) && Object.keys(errorData.data).length > 0)) {
+                console.log(`[${trackingNumber}] 409 response contains tracking data, using it`);
+                return parseTrackingMoreResponse(errorData, trackingNumber);
+              }
+            }
             courierCode = code;
             trackingCreated = true;
             break;
@@ -303,64 +228,23 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
         }
       }
       
+      // If POST response was empty, the tracking hasn't been scanned yet
+      // No need to make GET request - just return not_scanned
       if (!trackingCreated) {
-        console.warn(`[${trackingNumber}] Could not create tracking with any courier code, trying to get anyway...`);
+        console.warn(`[${trackingNumber}] Could not create tracking with any courier code`);
+        return {
+          status: 'not_scanned',
+          details: 'Tracking not found in TrackingMore',
+        };
       }
       
-      // Step 2: Get tracking information
-      // Wait a moment for TrackingMore to process the tracking (increased wait time)
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      
-      console.log(`[${trackingNumber}] Getting tracking information from TrackingMore...`);
-      // Try GET endpoint - use the query params format that works reliably
-      const getUrl = `${TRACKINGMORE_API_BASE}/trackings/get`;
-      
-      try {
-        console.log(`[${trackingNumber}] Getting tracking from TrackingMore...`);
-        const getResponse = await axios.get(getUrl, {
-          params: { tracking_number: cleanTrackingNumber },
-          headers: {
-            'Tracking-Api-Key': TRACKINGMORE_API_KEY,
-          },
-          timeout: 30000,
-        });
-        
-        // If we get a 200 HTTP status, use it (even if data is empty - that's correct for new trackings)
-        if (getResponse.status === 200) {
-          console.log(`[${trackingNumber}] GET successful (200)`);
-          // Check if response has actual tracking data
-          if (getResponse.data?.data && 
-              ((Array.isArray(getResponse.data.data) && getResponse.data.data.length > 0) ||
-               (!Array.isArray(getResponse.data.data) && Object.keys(getResponse.data.data).length > 0))) {
-            console.log(`[${trackingNumber}] GET response contains tracking data`);
-          } else {
-            console.log(`[${trackingNumber}] GET response is empty (tracking not scanned yet) - this is normal for new trackings`);
-          }
-          
-          // Process the response (even if empty - parseTrackingMoreResponse handles it)
-          if (getResponse.data) {
-            console.log(`[${trackingNumber}] Successfully fetched from TrackingMore`);
-            return parseTrackingMoreResponse(getResponse.data, trackingNumber);
-          }
-        }
-      } catch (getError) {
-        // Only log unexpected errors (not 404 which is normal for new trackings)
-        if (axios.isAxiosError(getError) && getError.response) {
-          const status = getError.response.status;
-          // 404 is expected for new trackings that haven't been processed yet, don't log as error
-          if (status !== 404) {
-            const errorData = getError.response.data;
-            console.warn(`[${trackingNumber}] GET failed (${status}):`, JSON.stringify(errorData).substring(0, 200));
-          } else {
-            // 404 is normal, just log at debug level
-            console.log(`[${trackingNumber}] GET returned 404 (tracking not yet available in TrackingMore)`);
-          }
-        } else {
-          // Network/timeout errors should be logged
-          console.warn(`[${trackingNumber}] GET request failed:`, axios.isAxiosError(getError) ? getError.message : 'Unknown error');
-        }
-        // Continue to return not_scanned below
-      }
+      // If we reach here, POST was successful but returned empty data
+      // This means tracking was created but not yet scanned by Royal Mail
+      console.log(`[${trackingNumber}] Tracking created in TrackingMore but not yet scanned - returning not_scanned`);
+      return {
+        status: 'not_scanned',
+        details: 'Tracking created but not yet scanned by Royal Mail',
+      };
     } catch (trackingMoreError) {
       console.error(`[${trackingNumber}] TrackingMore API error:`, 
         axios.isAxiosError(trackingMoreError) 
