@@ -16,13 +16,9 @@ export async function updateAllTrackingStatuses() {
   try {
     const allTrackingNumbers = await getAllTrackingNumbers();
     
-    // Filter out tracking numbers that are already marked as "delivered"
-    const trackingNumbers = allTrackingNumbers.filter(tn => tn.current_status !== 'delivered');
-    const skippedCount = allTrackingNumbers.length - trackingNumbers.length;
-    
-    if (skippedCount > 0) {
-      console.log(`Skipping ${skippedCount} tracking number(s) already marked as delivered`);
-    }
+    // Don't filter out delivered - we still want to update status_details for them
+    // Only skip if we want to avoid checking delivered (but we need status_details)
+    const trackingNumbers = allTrackingNumbers;
     console.log(`Checking ${trackingNumbers.length} tracking number(s)...`);
     
     let updated = 0;
@@ -30,7 +26,7 @@ export async function updateAllTrackingStatuses() {
     
     // If no tracking numbers to check, exit early
     if (trackingNumbers.length === 0) {
-      console.log('No tracking numbers to check (all are delivered or none exist)');
+      console.log('No tracking numbers to check');
       isRunning = false;
       return;
     }
@@ -44,15 +40,25 @@ export async function updateAllTrackingStatuses() {
         
         const result = await checkRoyalMailStatus(tn.tracking_number);
         
-        // Only update if status changed or statusHeader changed
-        if (result.status !== tn.current_status) {
+        // Update if status changed OR if status_details is missing/empty but we have a statusHeader
+        const statusChanged = result.status !== tn.current_status;
+        const needsStatusDetails = (!tn.status_details || tn.status_details === '-') && result.statusHeader;
+        const statusDetailsChanged = result.statusHeader && result.statusHeader !== tn.status_details;
+        
+        if (statusChanged || needsStatusDetails || statusDetailsChanged) {
           // Store the statusHeader (like "We've got it") in the status_details field
           await updateTrackingStatus(tn.id, result.status, result.statusHeader);
           updated++;
-          console.log(
-            `Updated ${tn.tracking_number}: ${tn.current_status} -> ${result.status}`,
-            result.statusHeader ? `Header: ${result.statusHeader}` : ''
-          );
+          if (statusChanged) {
+            console.log(
+              `Updated ${tn.tracking_number}: ${tn.current_status} -> ${result.status}`,
+              result.statusHeader ? `Header: ${result.statusHeader}` : ''
+            );
+          } else {
+            console.log(
+              `Updated status_details for ${tn.tracking_number}: ${tn.status_details || '(empty)'} -> ${result.statusHeader || '(empty)'}`
+            );
+          }
         }
       } catch (error) {
         errors++;
@@ -68,7 +74,7 @@ export async function updateAllTrackingStatuses() {
     }
     
     console.log(
-      `Update complete. Updated: ${updated}, Errors: ${errors}, Checked: ${trackingNumbers.length}, Skipped (delivered): ${skippedCount}, Total: ${allTrackingNumbers.length}`
+      `Update complete. Updated: ${updated}, Errors: ${errors}, Checked: ${trackingNumbers.length}, Total: ${allTrackingNumbers.length}`
     );
   } catch (error) {
     console.error('Error in scheduled update:', error);
