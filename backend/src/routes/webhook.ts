@@ -78,32 +78,35 @@ function extractStatusHeader(webhookData: any): string | undefined {
 /**
  * Test endpoint to verify webhook route is accessible
  * This should return JSON, not a blank page
+ * Must be defined BEFORE the catch-all route
  */
 router.get('/trackingmore/test', (req: Request, res: Response) => {
-  console.log('Test endpoint accessed');
-  res.setHeader('Content-Type', 'application/json');
-  res.json({ 
-    message: 'Webhook endpoint is accessible', 
-    timestamp: new Date().toISOString(),
-    webhookSecretConfigured: !!WEBHOOK_SECRET,
-    path: '/api/webhook/trackingmore/test'
-  });
-});
-
-// Catch-all for webhook routes to help debug
-router.all('/trackingmore/*', (req: Request, res: Response) => {
-  console.log(`Unhandled webhook route: ${req.method} ${req.path}`);
-  res.status(404).json({ 
-    error: 'Webhook route not found',
-    method: req.method,
-    path: req.path,
-    availableRoutes: ['GET /trackingmore/test', 'POST /trackingmore']
-  });
+  console.log('=== TEST ENDPOINT ACCESSED ===');
+  console.log('Method:', req.method);
+  console.log('Path:', req.path);
+  console.log('URL:', req.url);
+  
+  try {
+    res.setHeader('Content-Type', 'application/json');
+    const response = { 
+      message: 'Webhook endpoint is accessible', 
+      timestamp: new Date().toISOString(),
+      webhookSecretConfigured: !!WEBHOOK_SECRET,
+      path: '/api/webhook/trackingmore/test',
+      method: req.method
+    };
+    console.log('Sending response:', response);
+    res.json(response);
+  } catch (error) {
+    console.error('Error in test endpoint:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 /**
  * TrackingMore webhook endpoint
  * Receives POST requests from TrackingMore when tracking status changes
+ * Must be defined BEFORE the catch-all route
  */
 router.post('/trackingmore', async (req: any, res: Response) => {
   // Enhanced logging - log ALL incoming requests
@@ -196,6 +199,18 @@ router.post('/trackingmore', async (req: any, res: Response) => {
     // (we'll log the error for debugging)
     res.status(200).json({ error: 'Internal error processing webhook' });
   }
+});
+
+// Catch-all for webhook routes to help debug
+// Must be LAST so it doesn't interfere with specific routes
+router.all('/trackingmore/*', (req: Request, res: Response) => {
+  console.log(`Unhandled webhook route: ${req.method} ${req.path}`);
+  res.status(404).json({ 
+    error: 'Webhook route not found',
+    method: req.method,
+    path: req.path,
+    availableRoutes: ['GET /trackingmore/test', 'POST /trackingmore']
+  });
 });
 
 export default router;
