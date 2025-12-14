@@ -216,7 +216,7 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
             courier_code: code,
           };
           
-          await axios.post(
+          const createResponse = await axios.post(
             `${TRACKINGMORE_API_BASE}/trackings`,
             requestBody,
             {
@@ -228,6 +228,13 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
             }
           );
           console.log(`[${trackingNumber}] Tracking created/updated in TrackingMore with courier code: ${code}`);
+          
+          // Check if POST response contains tracking data
+          if (createResponse.data?.data) {
+            console.log(`[${trackingNumber}] POST response contains tracking data, using it directly`);
+            return parseTrackingMoreResponse(createResponse.data, trackingNumber);
+          }
+          
           courierCode = code;
           trackingCreated = true;
           break;
@@ -261,41 +268,67 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
       await new Promise(resolve => setTimeout(resolve, 2000));
       
       console.log(`[${trackingNumber}] Getting tracking information from TrackingMore...`);
-      // Try GET with just tracking_number first (after creation, courier_code may not be needed)
+      // Try different GET endpoint formats
       let getResponse;
-      try {
-        getResponse = await axios.get(
-          `${TRACKINGMORE_API_BASE}/trackings/get`,
-          {
-            params: {
-              tracking_number: cleanTrackingNumber,
-            },
+      const getFormats = [
+        // Format 1: Query params with snake_case
+        {
+          url: `${TRACKINGMORE_API_BASE}/trackings/get`,
+          params: { tracking_number: cleanTrackingNumber },
+        },
+        // Format 2: Query params with camelCase
+        {
+          url: `${TRACKINGMORE_API_BASE}/trackings/get`,
+          params: { trackingNumber: cleanTrackingNumber },
+        },
+        // Format 3: Path parameter
+        {
+          url: `${TRACKINGMORE_API_BASE}/trackings/${cleanTrackingNumber}`,
+          params: {},
+        },
+        // Format 4: Query params with courier_code (snake_case)
+        {
+          url: `${TRACKINGMORE_API_BASE}/trackings/get`,
+          params: { tracking_number: cleanTrackingNumber, courier_code: courierCode },
+        },
+        // Format 5: Query params with courierCode (camelCase)
+        {
+          url: `${TRACKINGMORE_API_BASE}/trackings/get`,
+          params: { trackingNumber: cleanTrackingNumber, courierCode: courierCode },
+        },
+      ];
+      
+      let lastError;
+      for (const format of getFormats) {
+        try {
+          console.log(`[${trackingNumber}] Trying GET format: ${format.url} with params:`, format.params);
+          getResponse = await axios.get(format.url, {
+            params: format.params,
             headers: {
               'Tracking-Api-Key': TRACKINGMORE_API_KEY,
             },
             timeout: 30000,
-          }
-        );
-      } catch (getError) {
-        // If that fails, try with courier_code
-        if (axios.isAxiosError(getError) && getError.response?.status === 400) {
-          console.log(`[${trackingNumber}] Trying GET with courier_code...`);
-          getResponse = await axios.get(
-            `${TRACKINGMORE_API_BASE}/trackings/get`,
-            {
-              params: {
-                tracking_number: cleanTrackingNumber,
-                courier_code: courierCode,
-              },
-              headers: {
-                'Tracking-Api-Key': TRACKINGMORE_API_KEY,
-              },
-              timeout: 30000,
+          });
+          console.log(`[${trackingNumber}] GET successful with format: ${format.url}`);
+          break;
+        } catch (getError) {
+          lastError = getError;
+          if (axios.isAxiosError(getError) && getError.response) {
+            const status = getError.response.status;
+            const errorData = getError.response.data;
+            console.warn(`[${trackingNumber}] GET failed (${status}):`, JSON.stringify(errorData));
+            // If it's a 404 or 4130, try next format
+            if (status === 404 || (errorData?.meta?.code === 4130)) {
+              continue;
             }
-          );
-        } else {
-          throw getError;
+          }
+          // For other errors, continue trying
+          continue;
         }
+      }
+      
+      if (!getResponse) {
+        throw lastError || new Error('All GET formats failed');
       }
       
       if (getResponse.data) {
