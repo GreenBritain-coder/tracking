@@ -137,21 +137,63 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
           // Ensure URL is properly encoded
           const encodedUrl = encodeURI(trackingUrl);
           
-          // Simple direct approach - use the query parameter URL directly
-          // Royal Mail should process the query parameter and show tracking results
+          // Use JavaScript to accept cookies and wait for query parameter to be processed
+          // Royal Mail shows a cookie banner that needs to be accepted before tracking loads
+          const jsSnippet = `
+            (async function() {
+              // Accept cookies if banner is present
+              const cookieButtons = document.querySelectorAll('button, a');
+              for (const btn of cookieButtons) {
+                const text = (btn.textContent || btn.innerText || '').toLowerCase();
+                if (text.includes('accept') || text.includes('continue') || text.includes('ok')) {
+                  if (text.includes('cookie') || text.includes('privacy')) {
+                    btn.click();
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    break;
+                  }
+                }
+              }
+              
+              // Wait for tracking content to load (check for tracking number in page)
+              const trackingNumber = '${cleanTrackingNumber}';
+              let attempts = 0;
+              const maxAttempts = 30; // 15 seconds max (30 * 500ms)
+              
+              while (attempts < maxAttempts) {
+                const text = document.body.innerText || document.body.textContent || '';
+                const hasTrackingContent = text.includes('Tracking number:') || 
+                                        text.includes('Service used:') ||
+                                        text.includes('Delivered') ||
+                                        text.includes("We've got it") ||
+                                        text.includes('expect to deliver') ||
+                                        text.includes(trackingNumber);
+                
+                if (hasTrackingContent && !text.includes('your reference number')) {
+                  return true; // Tracking content loaded
+                }
+                
+                await new Promise(resolve => setTimeout(resolve, 500));
+                attempts++;
+              }
+              
+              return false; // Timeout
+            })();
+          `.trim();
+          
           const response = await axios.get('https://app.scrapingbee.com/api/v1/', {
             params: {
               api_key: SCRAPINGBEE_API_KEY,
               url: encodedUrl, // Direct URL with properly encoded query parameter
               render_js: 'true', // Enable JavaScript rendering for dynamic content
-              wait: '15000', // 15 second wait for page to fully load and process query param
+              js_snippet: Buffer.from(jsSnippet).toString('base64'), // Accept cookies and wait for content
+              wait: '18000', // 18 second wait (cookies + query param processing)
               premium_proxy: 'true', // Use premium proxies for better success rate
               block_resources: 'false', // Don't block any resources (as ScrapingBee suggests)
               window_width: '1920',
               window_height: '1080',
               country_code: 'GB', // UK geolocation
             },
-            timeout: 30000, // 30 second timeout
+            timeout: 35000, // 35 second timeout
           });
           
           html = response.data;
