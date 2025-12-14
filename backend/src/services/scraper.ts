@@ -315,36 +315,20 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
       // Try different GET endpoint formats
       let getResponse;
       const getFormats = [
-        // Format 1: Path-based format (most likely correct based on API docs)
-        {
-          url: `${TRACKINGMORE_API_BASE}/trackings/${courierCode}/${cleanTrackingNumber}`,
-          params: {},
-        },
-        // Format 2: Path-based without courier code
-        {
-          url: `${TRACKINGMORE_API_BASE}/trackings/${cleanTrackingNumber}`,
-          params: {},
-        },
-        // Format 3: Query params with tracking_number and courier_code (snake_case)
-        {
-          url: `${TRACKINGMORE_API_BASE}/trackings/get`,
-          params: { 
-            tracking_number: cleanTrackingNumber,
-            courier_code: courierCode 
-          },
-        },
-        // Format 4: Query params with just tracking_number
+        // Format 1: Query params with just tracking_number (this one works - returns 200)
         {
           url: `${TRACKINGMORE_API_BASE}/trackings/get`,
           params: { tracking_number: cleanTrackingNumber },
         },
-        // Format 5: Try camelCase field names
+        // Format 2: Path-based format with courier code
         {
-          url: `${TRACKINGMORE_API_BASE}/trackings/get`,
-          params: { 
-            trackingNumber: cleanTrackingNumber,
-            courierCode: courierCode 
-          },
+          url: `${TRACKINGMORE_API_BASE}/trackings/${courierCode}/${cleanTrackingNumber}`,
+          params: {},
+        },
+        // Format 3: Path-based without courier code
+        {
+          url: `${TRACKINGMORE_API_BASE}/trackings/${cleanTrackingNumber}`,
+          params: {},
         },
       ];
       
@@ -360,14 +344,21 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
             timeout: 30000,
           });
           
-          // Check if response has actual tracking data
-          if (getResponse.data?.data && 
-              ((Array.isArray(getResponse.data.data) && getResponse.data.data.length > 0) ||
-               (!Array.isArray(getResponse.data.data) && Object.keys(getResponse.data.data).length > 0))) {
-            console.log(`[${trackingNumber}] GET successful with format: ${format.url}`);
+          // If we get a 200 response, use it (even if data is empty - that's correct for new trackings)
+          if (getResponse.status === 200 && getResponse.data?.meta?.code === 200) {
+            console.log(`[${trackingNumber}] GET successful (200) with format: ${format.url}`);
+            // Check if response has actual tracking data
+            if (getResponse.data?.data && 
+                ((Array.isArray(getResponse.data.data) && getResponse.data.data.length > 0) ||
+                 (!Array.isArray(getResponse.data.data) && Object.keys(getResponse.data.data).length > 0))) {
+              console.log(`[${trackingNumber}] GET response contains tracking data`);
+            } else {
+              console.log(`[${trackingNumber}] GET response is empty (tracking not scanned yet) - this is normal for new trackings`);
+            }
+            // Use this response even if empty - it's the correct endpoint
             break;
           } else {
-            console.warn(`[${trackingNumber}] GET returned empty data, trying next format...`);
+            console.warn(`[${trackingNumber}] GET returned unexpected response, trying next format...`);
             continue;
           }
         } catch (getError) {
