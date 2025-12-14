@@ -379,19 +379,20 @@ export default function Dashboard() {
                             // Try to parse the pasted text as a date
                             let parsedDate = '';
                             
-                            // Try ISO format first (YYYY-MM-DD)
-                            if (/^\d{4}-\d{2}-\d{2}$/.test(pastedText)) {
-                              parsedDate = pastedText;
+                            // Try ISO format first (YYYY-MM-DD or YYYY-MM-DD HH:MM)
+                            if (/^\d{4}-\d{2}-\d{2}(\s+\d{1,2}:\d{2})?$/.test(pastedText)) {
+                              parsedDate = pastedText.split(' ')[0]; // Extract just the date part
                             } 
-                            // Try DD/MM/YYYY or DD-MM-YYYY (UK format)
-                            else if (/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}$/.test(pastedText)) {
-                              const parts = pastedText.split(/[\/\-]/);
+                            // Try DD/MM/YYYY HH:MM or DD/MM/YYYY (UK format with optional time)
+                            else if (/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}(\s+\d{1,2}:\d{2})?$/.test(pastedText)) {
+                              const datePart = pastedText.split(' ')[0]; // Extract just the date part
+                              const parts = datePart.split(/[\/\-]/);
                               const day = parts[0].padStart(2, '0');
                               const month = parts[1].padStart(2, '0');
                               const year = parts[2];
                               parsedDate = `${year}-${month}-${day}`;
                             }
-                            // Try to parse as Date object (handles various formats)
+                            // Try to parse as Date object (handles various formats including with time)
                             else {
                               const date = new Date(pastedText);
                               if (!isNaN(date.getTime())) {
