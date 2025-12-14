@@ -125,25 +125,24 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
       const waitTime = 18000 + (attempt * 2000); // 18s, 20s, 22s, 24s, 26s
       
       try {
-        // CSS selectors that appear when tracking results are loaded
-        // Based on inspection: article element contains results
-        // ScrapingBee wait_for supports CSS selectors (not :contains pseudo-selector)
-        const waitForSelectors = 'article, [role="article"]';
+        // Use a longer fixed wait instead of wait_for
+        // Hash routing (#/tracking-results/) requires more time for JS to execute
+        // wait_for doesn't work well with hash routing since article exists on both search form and results
+        const fixedWaitTime = Math.min(15000 + (attempt * 2000), 25000); // 15s-25s, increasing with attempts
         
         const response = await axios.get('https://app.scrapingbee.com/api/v1/', {
           params: {
             api_key: SCRAPINGBEE_API_KEY,
             url: trackingUrl,
             render_js: 'true', // Enable JavaScript rendering
-            wait_for: waitForSelectors, // Wait for tracking results to appear
-            wait: '5000', // Fixed 5s wait as backup
+            wait: fixedWaitTime.toString(), // Fixed wait time for hash routing to execute
             premium_proxy: 'true', // Use premium proxies for better success rate
             block_resources: 'false', // Don't block any resources
             window_width: '1920',
             window_height: '1080',
             country_code: 'GB', // UK geolocation
           },
-          timeout: 45000, // 45 second timeout (increased for longer wait times)
+          timeout: 50000, // 50 second timeout (increased for longer wait times)
         });
 
         html = response.data;
