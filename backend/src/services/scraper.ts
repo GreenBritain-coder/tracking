@@ -142,15 +142,6 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
             window_width: '1920',
             window_height: '1080',
             country_code: 'GB', // UK geolocation
-            custom_headers: 'true',
-          },
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept-Language': 'en-GB,en;q=0.9',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Referer': 'https://www.royalmail.com/',
-            'Origin': 'https://www.royalmail.com',
           },
           timeout: 45000, // 45 second timeout (increased for longer wait times)
         });
