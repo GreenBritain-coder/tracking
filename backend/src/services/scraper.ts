@@ -74,26 +74,58 @@ function parseTrackingMoreResponse(data: any, trackingNumber: string): {
   statusHeader?: string;
 } {
   try {
-    // TrackingMore API response structure
-    const trackingData = data?.data || data;
-    const statusText = trackingData?.status || trackingData?.latest_status || '';
+    // Log the full response structure for debugging
+    console.log(`[${trackingNumber}] Parsing TrackingMore response:`, JSON.stringify(data, null, 2).substring(0, 1000));
+    
+    // TrackingMore API response structure - try multiple possible formats
+    const trackingData = data?.data || data?.item || data;
+    
+    // Try different status field names
+    const statusText = trackingData?.status || 
+                      trackingData?.latest_status || 
+                      trackingData?.lastEvent || 
+                      trackingData?.last_event ||
+                      trackingData?.tracking_status ||
+                      '';
     const statusLower = statusText.toLowerCase();
     
     // Extract status header/description
     const statusHeader = trackingData?.latest_status || 
                         trackingData?.status || 
+                        trackingData?.lastEvent ||
+                        trackingData?.last_event ||
                         trackingData?.sub_status ||
                         statusText;
     
-    // Extract details from tracking events
-    const events = trackingData?.origin_info?.trackinfo || trackingData?.tracking_info || [];
+    // Extract details from tracking events - try multiple possible paths
+    const events = trackingData?.origin_info?.trackinfo || 
+                   trackingData?.tracking_info || 
+                   trackingData?.trackinfo ||
+                   trackingData?.events ||
+                   trackingData?.origin_info?.tracking_info ||
+                   [];
+    
     const details = events.length > 0 
       ? JSON.stringify(events.map((e: any) => ({
-          date: e.date || e.track_date,
-          status: e.status || e.track_status,
-          details: e.details || e.track_location
+          date: e.date || e.track_date || e.time,
+          status: e.status || e.track_status || e.event,
+          details: e.details || e.track_location || e.location
         }))).substring(0, 500)
       : JSON.stringify(trackingData).substring(0, 500);
+    
+    // Check if tracking exists but has no status yet (pending)
+    if (!statusText && !events.length && trackingData) {
+      // If we have tracking data but no status/events, it might be pending
+      console.log(`[${trackingNumber}] TrackingMore: Has tracking data but no status yet, checking for pending state`);
+      if (trackingData.tracking_number || trackingData.courier_code) {
+        // Tracking was created but not yet scanned by courier
+        return {
+          status: 'not_scanned',
+          details,
+          statusHeader: 'Pending',
+        };
+      }
+    }
     
     // Map TrackingMore status to our TrackingStatus enum
     if (statusLower.includes('delivered') || 
@@ -232,6 +264,7 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
           // Check if POST response contains tracking data
           if (createResponse.data?.data) {
             console.log(`[${trackingNumber}] POST response contains tracking data, using it directly`);
+            console.log(`[${trackingNumber}] Response structure:`, JSON.stringify(createResponse.data, null, 2).substring(0, 1000));
             return parseTrackingMoreResponse(createResponse.data, trackingNumber);
           }
           
