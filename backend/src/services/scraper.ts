@@ -312,78 +312,54 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
       await new Promise(resolve => setTimeout(resolve, 3000));
       
       console.log(`[${trackingNumber}] Getting tracking information from TrackingMore...`);
-      // Try different GET endpoint formats
-      let getResponse;
-      const getFormats = [
-        // Format 1: Query params with just tracking_number (this one works - returns 200)
-        {
-          url: `${TRACKINGMORE_API_BASE}/trackings/get`,
-          params: { tracking_number: cleanTrackingNumber },
-        },
-        // Format 2: Path-based format with courier code
-        {
-          url: `${TRACKINGMORE_API_BASE}/trackings/${courierCode}/${cleanTrackingNumber}`,
-          params: {},
-        },
-        // Format 3: Path-based without courier code
-        {
-          url: `${TRACKINGMORE_API_BASE}/trackings/${cleanTrackingNumber}`,
-          params: {},
-        },
-      ];
+      // Try GET endpoint - use the query params format that works reliably
+      const getUrl = `${TRACKINGMORE_API_BASE}/trackings/get`;
       
-      let lastError;
-      for (const format of getFormats) {
-        try {
-          console.log(`[${trackingNumber}] Trying GET format: ${format.url} with params:`, JSON.stringify(format.params));
-          getResponse = await axios.get(format.url, {
-            params: format.params,
-            headers: {
-              'Tracking-Api-Key': TRACKINGMORE_API_KEY,
-            },
-            timeout: 30000,
-          });
-          
-          // If we get a 200 response, use it (even if data is empty - that's correct for new trackings)
-          if (getResponse.status === 200 && getResponse.data?.meta?.code === 200) {
-            console.log(`[${trackingNumber}] GET successful (200) with format: ${format.url}`);
-            // Check if response has actual tracking data
-            if (getResponse.data?.data && 
-                ((Array.isArray(getResponse.data.data) && getResponse.data.data.length > 0) ||
-                 (!Array.isArray(getResponse.data.data) && Object.keys(getResponse.data.data).length > 0))) {
-              console.log(`[${trackingNumber}] GET response contains tracking data`);
-            } else {
-              console.log(`[${trackingNumber}] GET response is empty (tracking not scanned yet) - this is normal for new trackings`);
-            }
-            // Use this response even if empty - it's the correct endpoint
-            break;
+      try {
+        console.log(`[${trackingNumber}] Getting tracking from TrackingMore...`);
+        const getResponse = await axios.get(getUrl, {
+          params: { tracking_number: cleanTrackingNumber },
+          headers: {
+            'Tracking-Api-Key': TRACKINGMORE_API_KEY,
+          },
+          timeout: 30000,
+        });
+        
+        // If we get a 200 HTTP status, use it (even if data is empty - that's correct for new trackings)
+        if (getResponse.status === 200) {
+          console.log(`[${trackingNumber}] GET successful (200)`);
+          // Check if response has actual tracking data
+          if (getResponse.data?.data && 
+              ((Array.isArray(getResponse.data.data) && getResponse.data.data.length > 0) ||
+               (!Array.isArray(getResponse.data.data) && Object.keys(getResponse.data.data).length > 0))) {
+            console.log(`[${trackingNumber}] GET response contains tracking data`);
           } else {
-            console.warn(`[${trackingNumber}] GET returned unexpected response, trying next format...`);
-            continue;
+            console.log(`[${trackingNumber}] GET response is empty (tracking not scanned yet) - this is normal for new trackings`);
           }
-        } catch (getError) {
-          lastError = getError;
-          if (axios.isAxiosError(getError) && getError.response) {
-            const status = getError.response.status;
+          
+          // Process the response (even if empty - parseTrackingMoreResponse handles it)
+          if (getResponse.data) {
+            console.log(`[${trackingNumber}] Successfully fetched from TrackingMore`);
+            return parseTrackingMoreResponse(getResponse.data, trackingNumber);
+          }
+        }
+      } catch (getError) {
+        // Only log unexpected errors (not 404 which is normal for new trackings)
+        if (axios.isAxiosError(getError) && getError.response) {
+          const status = getError.response.status;
+          // 404 is expected for new trackings that haven't been processed yet, don't log as error
+          if (status !== 404) {
             const errorData = getError.response.data;
             console.warn(`[${trackingNumber}] GET failed (${status}):`, JSON.stringify(errorData).substring(0, 200));
-            // If it's a 404 or 4130, try next format
-            if (status === 404 || (errorData?.meta?.code === 4130)) {
-              continue;
-            }
+          } else {
+            // 404 is normal, just log at debug level
+            console.log(`[${trackingNumber}] GET returned 404 (tracking not yet available in TrackingMore)`);
           }
-          // For other errors, continue trying
-          continue;
+        } else {
+          // Network/timeout errors should be logged
+          console.warn(`[${trackingNumber}] GET request failed:`, axios.isAxiosError(getError) ? getError.message : 'Unknown error');
         }
-      }
-      
-      if (!getResponse) {
-        throw lastError || new Error('All GET formats failed');
-      }
-      
-      if (getResponse.data) {
-        console.log(`[${trackingNumber}] Successfully fetched from TrackingMore`);
-        return parseTrackingMoreResponse(getResponse.data, trackingNumber);
+        // Continue to return not_scanned below
       }
     } catch (trackingMoreError) {
       console.error(`[${trackingNumber}] TrackingMore API error:`, 
