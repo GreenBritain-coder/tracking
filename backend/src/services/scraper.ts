@@ -22,21 +22,21 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
     // Use ScrapingBee to render the Royal Mail tracking page
     const trackingUrl = `https://www.royalmail.com/track-your-item#/tracking-results/${trackingNumber}`;
     
-    // Retry up to 3 times if we don't get tracking content
+    // Retry up to 5 times if we don't get tracking content
     let html = '';
     let attempt = 0;
-    const maxAttempts = 3;
+    const maxAttempts = 5;
     
     for (attempt = 1; attempt <= maxAttempts; attempt++) {
       if (attempt > 1) {
         console.log(`[${trackingNumber}] Retry attempt ${attempt}/${maxAttempts}...`);
-        // Wait a bit between retries (random 3-5 seconds to look more human-like)
-        const delay = 3000 + Math.floor(Math.random() * 2000);
+        // Wait longer between retries when we get search form (5-8 seconds to look more human-like)
+        const delay = 5000 + Math.floor(Math.random() * 3000);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
       
-      // Use moderate wait times (15-17s) to avoid timeouts
-      const waitTime = 13000 + (attempt * 2000); // 15s, 17s, 19s
+      // Use longer wait times (18-26s) to give Royal Mail's JS more time to load
+      const waitTime = 18000 + (attempt * 2000); // 18s, 20s, 22s, 24s, 26s
       
       try {
         const response = await axios.get('https://app.scrapingbee.com/api/v1/', {
@@ -50,7 +50,7 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
             window_width: '1920',
             window_height: '1080',
           },
-          timeout: 35000, // 35 second timeout
+          timeout: 45000, // 45 second timeout (increased for longer wait times)
         });
 
         html = response.data;
@@ -88,6 +88,12 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
         } else {
           if (isSearchForm) {
             console.log(`[${trackingNumber}] Search form detected on attempt ${attempt} (not tracking results), retrying...`);
+            // If we got search form, wait a bit longer before next retry
+            if (attempt < maxAttempts) {
+              const extraDelay = 3000 + Math.floor(Math.random() * 2000);
+              console.log(`[${trackingNumber}] Waiting additional ${extraDelay}ms before retry (search form detected)...`);
+              await new Promise(resolve => setTimeout(resolve, extraDelay));
+            }
           } else {
             console.log(`[${trackingNumber}] No tracking content detected on attempt ${attempt}, may retry...`);
           }
