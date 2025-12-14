@@ -203,38 +203,61 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
     
     try {
       // Step 1: Create tracking in TrackingMore (if not already exists)
-      // Courier code for Royal Mail - try 'royal-mail' first, fallback to 'royalmail' if needed
-      const courierCode = 'royal-mail';
+      // Try different courier codes for Royal Mail
+      const courierCodes = ['royalmail', 'royal-mail'];
+      let courierCode = courierCodes[0];
+      let trackingCreated = false;
       
-      try {
-        console.log(`[${trackingNumber}] Creating tracking in TrackingMore...`);
-        await axios.post(
-          `${TRACKINGMORE_API_BASE}/trackings/post`,
-          {
+      for (const code of courierCodes) {
+        try {
+          console.log(`[${trackingNumber}] Creating tracking in TrackingMore with courier code: ${code}...`);
+          const requestBody = {
             tracking_number: cleanTrackingNumber,
-            courier_code: courierCode,
-          },
-          {
-            headers: {
-              'Tracking-Api-Key': TRACKINGMORE_API_KEY,
-              'Content-Type': 'application/json',
-            },
-            timeout: 30000,
+            courier_code: code,
+          };
+          
+          await axios.post(
+            `${TRACKINGMORE_API_BASE}/trackings/post`,
+            requestBody,
+            {
+              headers: {
+                'Content-Type': 'application/json',
+                'Tracking-Api-Key': TRACKINGMORE_API_KEY,
+              },
+              timeout: 30000,
+            }
+          );
+          console.log(`[${trackingNumber}] Tracking created/updated in TrackingMore with courier code: ${code}`);
+          courierCode = code;
+          trackingCreated = true;
+          break;
+        } catch (createError) {
+          // If tracking already exists (409), that's fine - continue to get tracking
+          if (axios.isAxiosError(createError) && createError.response?.status === 409) {
+            console.log(`[${trackingNumber}] Tracking already exists in TrackingMore with courier code: ${code}`);
+            courierCode = code;
+            trackingCreated = true;
+            break;
+          } else if (axios.isAxiosError(createError) && createError.response) {
+            const errorData = createError.response.data;
+            console.warn(`[${trackingNumber}] Failed to create tracking with courier code ${code}:`, 
+              `${createError.response.status} ${createError.response.statusText}`,
+              JSON.stringify(errorData));
+            // If it's a 404 or invalid courier code, try next one
+            if (createError.response.status === 404 || 
+                (errorData?.meta?.code === 4130 && errorData?.meta?.message?.includes('courier'))) {
+              continue; // Try next courier code
+            }
           }
-        );
-        console.log(`[${trackingNumber}] Tracking created/updated in TrackingMore`);
-      } catch (createError) {
-        // If tracking already exists (409), that's fine - continue to get tracking
-        if (axios.isAxiosError(createError) && createError.response?.status === 409) {
-          console.log(`[${trackingNumber}] Tracking already exists in TrackingMore`);
-        } else {
-          console.warn(`[${trackingNumber}] Failed to create tracking:`, 
-            axios.isAxiosError(createError) ? createError.message : 'Unknown error');
         }
       }
       
+      if (!trackingCreated) {
+        console.warn(`[${trackingNumber}] Could not create tracking with any courier code, trying to get anyway...`);
+      }
+      
       // Step 2: Get tracking information
-      console.log(`[${trackingNumber}] Getting tracking information from TrackingMore...`);
+      console.log(`[${trackingNumber}] Getting tracking information from TrackingMore with courier code: ${courierCode}...`);
       const getResponse = await axios.get(
         `${TRACKINGMORE_API_BASE}/trackings/get`,
         {
