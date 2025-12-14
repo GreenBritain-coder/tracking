@@ -141,34 +141,39 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
           // Royal Mail shows a cookie banner that needs to be accepted before tracking loads
           const jsSnippet = `
             (async function() {
-              // Accept cookies if banner is present
-              const cookieButtons = document.querySelectorAll('button, a');
-              for (const btn of cookieButtons) {
-                const text = (btn.textContent || btn.innerText || '').toLowerCase();
-                if (text.includes('accept') || text.includes('continue') || text.includes('ok')) {
-                  if (text.includes('cookie') || text.includes('privacy')) {
-                    btn.click();
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    break;
-                  }
+              // Accept cookies if banner is present (simplified - just look for common accept buttons)
+              try {
+                const acceptBtn = Array.from(document.querySelectorAll('button, a')).find(btn => {
+                  const text = (btn.textContent || '').toLowerCase();
+                  return (text.includes('accept') || text.includes('continue')) && 
+                         (text.includes('cookie') || text.includes('privacy') || text.length < 20);
+                });
+                if (acceptBtn) {
+                  acceptBtn.click();
+                  await new Promise(resolve => setTimeout(resolve, 2000));
                 }
-              }
+              } catch(e) {}
               
-              // Wait for tracking content to load (check for tracking number in page)
+              // Wait for tracking content to load (simplified check)
               const trackingNumber = '${cleanTrackingNumber}';
               let attempts = 0;
-              const maxAttempts = 30; // 15 seconds max (30 * 500ms)
+              const maxAttempts = 20; // 10 seconds max (20 * 500ms) - reduced from 30
               
               while (attempts < maxAttempts) {
-                const text = document.body.innerText || document.body.textContent || '';
-                const hasTrackingContent = text.includes('Tracking number:') || 
-                                        text.includes('Service used:') ||
-                                        text.includes('Delivered') ||
-                                        text.includes("We've got it") ||
+                const text = (document.body.innerText || document.body.textContent || '').toLowerCase();
+                const hasTrackingContent = text.includes('tracking number') || 
+                                        text.includes('service used') ||
+                                        text.includes('delivered') ||
+                                        text.includes("we've got it") ||
                                         text.includes('expect to deliver') ||
-                                        text.includes(trackingNumber);
+                                        text.includes(trackingNumber.toLowerCase());
                 
-                if (hasTrackingContent && !text.includes('your reference number')) {
+                // Make sure it's not just the search form
+                const isSearchForm = text.includes('your reference number') && 
+                                   !text.includes('tracking number') &&
+                                   !text.includes('service used');
+                
+                if (hasTrackingContent && !isSearchForm) {
                   return true; // Tracking content loaded
                 }
                 
@@ -186,14 +191,14 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
               url: encodedUrl, // Direct URL with properly encoded query parameter
               render_js: 'true', // Enable JavaScript rendering for dynamic content
               js_snippet: Buffer.from(jsSnippet).toString('base64'), // Accept cookies and wait for content
-              wait: '18000', // 18 second wait (cookies + query param processing)
+              wait: '15000', // 15 second wait (2s for cookies + 10s for content + 3s buffer)
               premium_proxy: 'true', // Use premium proxies for better success rate
               block_resources: 'false', // Don't block any resources (as ScrapingBee suggests)
               window_width: '1920',
               window_height: '1080',
               country_code: 'GB', // UK geolocation
             },
-            timeout: 35000, // 35 second timeout
+            timeout: 40000, // 40 second timeout (increased from 35s)
           });
           
           html = response.data;
