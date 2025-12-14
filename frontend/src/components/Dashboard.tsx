@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, TrackingNumber, Box } from '../api/api';
+import { api, TrackingNumber, Box, Postbox } from '../api/api';
 import './Dashboard.css';
 
 const STATUS_COLORS = {
@@ -23,10 +23,16 @@ const STATUS_LABELS = {
 export default function Dashboard() {
   const [trackingNumbers, setTrackingNumbers] = useState<TrackingNumber[]>([]);
   const [boxes, setBoxes] = useState<Box[]>([]);
+  const [postboxes, setPostboxes] = useState<Postbox[]>([]);
   const [selectedBox, setSelectedBox] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [showPostboxManager, setShowPostboxManager] = useState(false);
+  const [editingPostbox, setEditingPostbox] = useState<Postbox | null>(null);
+  const [newPostboxName, setNewPostboxName] = useState('');
+  const [editingTrackingId, setEditingTrackingId] = useState<number | null>(null);
+  const [customTimestamp, setCustomTimestamp] = useState('');
 
   useEffect(() => {
     loadData();
@@ -38,12 +44,14 @@ export default function Dashboard() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [trackingRes, boxesRes] = await Promise.all([
+      const [trackingRes, boxesRes, postboxesRes] = await Promise.all([
         api.getTrackingNumbers(selectedBox || undefined),
         api.getBoxes(),
+        api.getPostboxes(),
       ]);
       setTrackingNumbers(trackingRes.data);
       setBoxes(boxesRes.data);
+      setPostboxes(postboxesRes.data);
       setError('');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to load data');
@@ -85,13 +93,68 @@ export default function Dashboard() {
     }
   };
 
-  const handleStatusChange = async (id: number, newStatus: 'not_scanned' | 'scanned' | 'delivered') => {
+  const handleStatusChange = async (
+    id: number, 
+    newStatus: 'not_scanned' | 'scanned' | 'delivered',
+    postboxId?: number | null,
+    timestamp?: string | null
+  ) => {
     try {
-      await api.updateTrackingStatus(id, newStatus);
+      await api.updateTrackingStatus(id, newStatus, postboxId, timestamp);
       // Reload data to show updated status
       loadData();
+      setEditingTrackingId(null);
+      setCustomTimestamp('');
     } catch (err: any) {
       alert(err.response?.data?.error || 'Failed to update status');
+    }
+  };
+
+  const handlePostboxChange = async (id: number, postboxId: number | null) => {
+    const tracking = trackingNumbers.find(t => t.id === id);
+    if (!tracking) return;
+    
+    await handleStatusChange(
+      id, 
+      tracking.current_status, 
+      postboxId,
+      tracking.custom_timestamp || null
+    );
+  };
+
+  const handlePostboxCreate = async () => {
+    if (!newPostboxName.trim()) {
+      alert('Please enter a postbox name');
+      return;
+    }
+    try {
+      await api.createPostbox(newPostboxName.trim());
+      setNewPostboxName('');
+      loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to create postbox');
+    }
+  };
+
+  const handlePostboxUpdate = async (id: number, name: string) => {
+    try {
+      await api.updatePostbox(id, name);
+      setEditingPostbox(null);
+      loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to update postbox');
+    }
+  };
+
+  const handlePostboxDelete = async (id: number) => {
+    if (!confirm('Are you sure you want to delete this postbox? This will remove it from all tracking numbers.')) {
+      return;
+    }
+    try {
+      await api.deletePostbox(id);
+      loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to delete postbox');
     }
   };
 
@@ -125,6 +188,13 @@ export default function Dashboard() {
             style={{ marginRight: '10px', padding: '8px 16px', cursor: refreshing ? 'not-allowed' : 'pointer' }}
           >
             {refreshing ? 'Refreshing...' : '🔄 Refresh All Statuses'}
+          </button>
+          <button
+            onClick={() => setShowPostboxManager(!showPostboxManager)}
+            className="postbox-manager-btn"
+            style={{ marginRight: '10px', padding: '8px 16px', cursor: 'pointer' }}
+          >
+            📮 Manage Postboxes
           </button>
           <div className="filter-controls">
             <label>
@@ -193,6 +263,59 @@ export default function Dashboard() {
         </div>
       )}
 
+      {showPostboxManager && (
+        <div className="postbox-manager">
+          <div className="postbox-manager-header">
+            <h3>📮 Manage Postboxes</h3>
+            <button onClick={() => setShowPostboxManager(false)}>✕ Close</button>
+          </div>
+          <div className="postbox-manager-content">
+            <div className="postbox-create">
+              <input
+                type="text"
+                placeholder="New postbox name..."
+                value={newPostboxName}
+                onChange={(e) => setNewPostboxName(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handlePostboxCreate()}
+              />
+              <button onClick={handlePostboxCreate}>Add Postbox</button>
+            </div>
+            <div className="postbox-list">
+              {postboxes.map((postbox) => (
+                <div key={postbox.id} className="postbox-item">
+                  {editingPostbox?.id === postbox.id ? (
+                    <>
+                      <input
+                        type="text"
+                        value={editingPostbox.name}
+                        onChange={(e) => setEditingPostbox({ ...editingPostbox, name: e.target.value })}
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter') {
+                            handlePostboxUpdate(editingPostbox.id, editingPostbox.name);
+                          } else if (e.key === 'Escape') {
+                            setEditingPostbox(null);
+                          }
+                        }}
+                        autoFocus
+                      />
+                      <button onClick={() => handlePostboxUpdate(editingPostbox.id, editingPostbox.name)}>✓</button>
+                      <button onClick={() => setEditingPostbox(null)}>✕</button>
+                    </>
+                  ) : (
+                    <>
+                      <span>{postbox.name}</span>
+                      <button onClick={() => setEditingPostbox(postbox)}>✏️ Edit</button>
+                      <button onClick={() => handlePostboxDelete(postbox.id)}>🗑️ Delete</button>
+                    </>
+                  )}
+                </div>
+              ))}
+              {postboxes.length === 0 && <p>No postboxes yet. Create one above.</p>}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="tracking-table-container">
         <table className="tracking-table">
           <thead>
@@ -201,6 +324,8 @@ export default function Dashboard() {
               <th>Status Details</th>
               <th>Tracking Number</th>
               <th>Box</th>
+              <th>Postbox</th>
+              <th>Custom Timestamp</th>
               <th>Created</th>
               <th>Updated</th>
               <th>Actions</th>
@@ -209,7 +334,7 @@ export default function Dashboard() {
           <tbody>
             {trackingNumbers.length === 0 ? (
               <tr>
-                <td colSpan={7} className="empty-state">
+                <td colSpan={9} className="empty-state">
                   No tracking numbers found
                 </td>
               </tr>
@@ -227,13 +352,86 @@ export default function Dashboard() {
                   <td className="status-details">{tn.status_details || '-'}</td>
                   <td className="tracking-number">{tn.tracking_number}</td>
                   <td>{tn.box_name || '-'}</td>
+                  <td>
+                    <select
+                      value={tn.postbox_id || ''}
+                      onChange={(e) => handlePostboxChange(tn.id, e.target.value ? parseInt(e.target.value) : null)}
+                      className="postbox-select"
+                    >
+                      <option value="">-</option>
+                      {postboxes.map((postbox) => (
+                        <option key={postbox.id} value={postbox.id}>
+                          {postbox.name}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td>
+                    {editingTrackingId === tn.id ? (
+                      <div className="timestamp-edit">
+                        <input
+                          type="datetime-local"
+                          value={customTimestamp || (tn.custom_timestamp ? new Date(tn.custom_timestamp).toISOString().slice(0, 16) : '')}
+                          onChange={(e) => setCustomTimestamp(e.target.value)}
+                          onBlur={() => {
+                            if (customTimestamp) {
+                              handleStatusChange(tn.id, tn.current_status, tn.postbox_id, customTimestamp);
+                            } else {
+                              setEditingTrackingId(null);
+                            }
+                          }}
+                          onKeyPress={(e) => {
+                            if (e.key === 'Enter' && customTimestamp) {
+                              handleStatusChange(tn.id, tn.current_status, tn.postbox_id, customTimestamp);
+                            } else if (e.key === 'Escape') {
+                              setEditingTrackingId(null);
+                              setCustomTimestamp('');
+                            }
+                          }}
+                          autoFocus
+                        />
+                        <button onClick={() => {
+                          if (customTimestamp) {
+                            handleStatusChange(tn.id, tn.current_status, tn.postbox_id, customTimestamp);
+                          } else {
+                            setEditingTrackingId(null);
+                          }
+                        }}>✓</button>
+                        <button onClick={() => {
+                          setEditingTrackingId(null);
+                          setCustomTimestamp('');
+                        }}>✕</button>
+                      </div>
+                    ) : (
+                      <div className="timestamp-display">
+                        <span>{tn.custom_timestamp ? formatDate(tn.custom_timestamp) : '-'}</span>
+                        <button 
+                          onClick={() => {
+                            setEditingTrackingId(tn.id);
+                            setCustomTimestamp(tn.custom_timestamp ? new Date(tn.custom_timestamp).toISOString().slice(0, 16) : '');
+                          }}
+                          className="edit-timestamp-btn"
+                          title="Edit timestamp"
+                        >
+                          ✏️
+                        </button>
+                      </div>
+                    )}
+                  </td>
                   <td>{formatDate(tn.created_at)}</td>
                   <td>{formatDate(tn.updated_at)}</td>
                   <td>
                     <div className="action-buttons">
                       <select
                         value={tn.current_status}
-                        onChange={(e) => handleStatusChange(tn.id, e.target.value as 'not_scanned' | 'scanned' | 'delivered')}
+                        onChange={(e) => {
+                          const newStatus = e.target.value as 'not_scanned' | 'scanned' | 'delivered';
+                          if (editingTrackingId === tn.id && customTimestamp) {
+                            handleStatusChange(tn.id, newStatus, tn.postbox_id, customTimestamp);
+                          } else {
+                            handleStatusChange(tn.id, newStatus, tn.postbox_id, tn.custom_timestamp || null);
+                          }
+                        }}
                         className="status-select"
                       >
                         <option value="not_scanned">🔴 Not Scanned</option>

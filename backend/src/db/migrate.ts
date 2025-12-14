@@ -21,14 +21,26 @@ async function migrate() {
       )
     `);
 
+    // Create postboxes table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS postboxes (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) UNIQUE NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // Create tracking_numbers table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS tracking_numbers (
         id SERIAL PRIMARY KEY,
         tracking_number VARCHAR(255) UNIQUE NOT NULL,
         box_id INTEGER REFERENCES boxes(id) ON DELETE SET NULL,
+        postbox_id INTEGER REFERENCES postboxes(id) ON DELETE SET NULL,
         current_status VARCHAR(20) DEFAULT 'not_scanned' CHECK (current_status IN ('not_scanned', 'scanned', 'delivered')),
         status_details TEXT,
+        custom_timestamp TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
@@ -47,6 +59,32 @@ async function migrate() {
       END $$;
     `);
 
+    // Add postbox_id column if it doesn't exist
+    await pool.query(`
+      DO $$ 
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name='tracking_numbers' AND column_name='postbox_id'
+        ) THEN
+          ALTER TABLE tracking_numbers ADD COLUMN postbox_id INTEGER REFERENCES postboxes(id) ON DELETE SET NULL;
+        END IF;
+      END $$;
+    `);
+
+    // Add custom_timestamp column if it doesn't exist
+    await pool.query(`
+      DO $$ 
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name='tracking_numbers' AND column_name='custom_timestamp'
+        ) THEN
+          ALTER TABLE tracking_numbers ADD COLUMN custom_timestamp TIMESTAMP;
+        END IF;
+      END $$;
+    `);
+
     // Create status_history table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS status_history (
@@ -61,6 +99,7 @@ async function migrate() {
     // Create indexes
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_tracking_numbers_box_id ON tracking_numbers(box_id);
+      CREATE INDEX IF NOT EXISTS idx_tracking_numbers_postbox_id ON tracking_numbers(postbox_id);
       CREATE INDEX IF NOT EXISTS idx_tracking_numbers_status ON tracking_numbers(current_status);
       CREATE INDEX IF NOT EXISTS idx_status_history_tracking_id ON status_history(tracking_number_id);
       CREATE INDEX IF NOT EXISTS idx_status_history_timestamp ON status_history(timestamp);

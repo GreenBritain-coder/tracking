@@ -11,6 +11,13 @@ import {
   bulkCreateTrackingNumbers,
 } from '../models/tracking';
 import { createBox, getAllBoxes, getBoxById, deleteBox } from '../models/box';
+import { 
+  getAllPostboxes, 
+  createPostbox, 
+  updatePostbox, 
+  deletePostbox,
+  getPostboxById 
+} from '../models/postbox';
 import { getStatusHistory } from '../models/statusHistory';
 import { updateAllTrackingStatuses } from '../services/scheduler';
 
@@ -197,7 +204,11 @@ router.post('/refresh', async (req: AuthRequest, res: Response) => {
 // Manual status update endpoint - update a single tracking number's status
 router.patch(
   '/numbers/:id/status',
-  [body('status').isIn(['not_scanned', 'scanned', 'delivered'])],
+  [
+    body('status').isIn(['not_scanned', 'scanned', 'delivered']),
+    body('postbox_id').optional().isInt().toInt(),
+    body('custom_timestamp').optional().isISO8601().toDate(),
+  ],
   async (req: AuthRequest, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -206,15 +217,32 @@ router.patch(
 
     try {
       const { id } = req.params;
-      const { status } = req.body;
+      const { status, postbox_id, custom_timestamp } = req.body;
       
       const tracking = await getTrackingNumberById(Number(id));
       if (!tracking) {
         return res.status(404).json({ error: 'Tracking number not found' });
       }
 
-      await updateTrackingStatus(Number(id), status);
-      const updated = await getTrackingNumberById(Number(id));
+      // Validate postbox_id if provided
+      if (postbox_id !== undefined && postbox_id !== null) {
+        const postbox = await getPostboxById(postbox_id);
+        if (!postbox) {
+          return res.status(400).json({ error: 'Postbox not found' });
+        }
+      }
+
+      await updateTrackingStatus(
+        Number(id), 
+        status, 
+        undefined, 
+        postbox_id ?? null,
+        custom_timestamp || null
+      );
+      
+      // Get updated tracking with joins
+      const allTracking = await getAllTrackingNumbers();
+      const updated = allTracking.find(t => t.id === Number(id));
       
       res.json(updated);
     } catch (error) {
@@ -223,6 +251,75 @@ router.patch(
     }
   }
 );
+
+// Postboxes endpoints
+router.get('/postboxes', async (req: AuthRequest, res: Response) => {
+  try {
+    const postboxes = await getAllPostboxes();
+    res.json(postboxes);
+  } catch (error) {
+    console.error('Error fetching postboxes:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post(
+  '/postboxes',
+  [body('name').notEmpty().trim()],
+  async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    try {
+      const { name } = req.body;
+      const postbox = await createPostbox(name);
+      res.status(201).json(postbox);
+    } catch (error) {
+      console.error('Error creating postbox:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
+
+router.patch(
+  '/postboxes/:id',
+  [body('name').notEmpty().trim()],
+  async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    try {
+      const { id } = req.params;
+      const { name } = req.body;
+      const postbox = await updatePostbox(Number(id), name);
+      if (!postbox) {
+        return res.status(404).json({ error: 'Postbox not found' });
+      }
+      res.json(postbox);
+    } catch (error) {
+      console.error('Error updating postbox:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
+
+router.delete('/postboxes/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const deleted = await deletePostbox(Number(id));
+    if (!deleted) {
+      return res.status(404).json({ error: 'Postbox not found' });
+    }
+    res.json({ message: 'Postbox deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting postbox:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 export default router;
 

@@ -197,6 +197,211 @@
   box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
 }
 
+.postbox-select {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  cursor: pointer;
+  background-color: white;
+  min-width: 120px;
+}
+
+.postbox-select:hover {
+  border-color: #3498db;
+}
+
+.postbox-manager-btn {
+  background-color: #3498db;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.postbox-manager-btn:hover {
+  background-color: #2980b9;
+}
+
+.postbox-manager {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.postbox-manager-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #ddd;
+}
+
+.postbox-manager-header h3 {
+  margin: 0;
+  color: #2c3e50;
+}
+
+.postbox-manager-header button {
+  background: #e74c3c;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.postbox-manager-header button:hover {
+  background: #c0392b;
+}
+
+.postbox-create {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.postbox-create input {
+  flex: 1;
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.875rem;
+}
+
+.postbox-create button {
+  background-color: #27ae60;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.postbox-create button:hover {
+  background-color: #229954;
+}
+
+.postbox-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.postbox-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+}
+
+.postbox-item span {
+  flex: 1;
+  font-weight: 500;
+}
+
+.postbox-item input {
+  flex: 1;
+  padding: 0.4rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.postbox-item button {
+  padding: 0.4rem 0.8rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.postbox-item button:first-of-type {
+  background-color: #27ae60;
+  color: white;
+}
+
+.postbox-item button:first-of-type:hover {
+  background-color: #229954;
+}
+
+.postbox-item button:last-of-type {
+  background-color: #e74c3c;
+  color: white;
+}
+
+.postbox-item button:last-of-type:hover {
+  background-color: #c0392b;
+}
+
+.timestamp-display {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.timestamp-display span {
+  font-size: 0.875rem;
+}
+
+.edit-timestamp-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.2rem;
+  font-size: 0.875rem;
+  opacity: 0.6;
+}
+
+.edit-timestamp-btn:hover {
+  opacity: 1;
+}
+
+.timestamp-edit {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.timestamp-edit input {
+  padding: 0.4rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.875rem;
+}
+
+.timestamp-edit button {
+  padding: 0.3rem 0.6rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.75rem;
+}
+
+.timestamp-edit button:first-of-type {
+  background-color: #27ae60;
+  color: white;
+}
+
+.timestamp-edit button:first-of-type:hover {
+  background-color: #229954;
+}
+
+.timestamp-edit button:last-of-type {
+  background-color: #e74c3c;
+  color: white;
+}
+
+.timestamp-edit button:last-of-type:hover {
+  background-color: #c0392b;
+}
+
 .delete-btn {
   background-color: #e74c3c;
   color: white;

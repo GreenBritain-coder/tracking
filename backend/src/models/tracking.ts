@@ -6,14 +6,17 @@ export interface TrackingNumber {
   id: number;
   tracking_number: string;
   box_id: number | null;
+  postbox_id: number | null;
   current_status: TrackingStatus;
   status_details: string | null;
+  custom_timestamp: Date | null;
   created_at: Date;
   updated_at: Date;
 }
 
 export interface TrackingNumberWithBox extends TrackingNumber {
   box_name: string | null;
+  postbox_name: string | null;
 }
 
 export async function createTrackingNumber(
@@ -50,9 +53,11 @@ export async function getAllTrackingNumbers(): Promise<TrackingNumberWithBox[]> 
   const result = await pool.query(`
     SELECT 
       t.*,
-      b.name as box_name
+      b.name as box_name,
+      p.name as postbox_name
     FROM tracking_numbers t
     LEFT JOIN boxes b ON t.box_id = b.id
+    LEFT JOIN postboxes p ON t.postbox_id = p.id
     ORDER BY t.created_at DESC
   `);
   return result.rows;
@@ -62,9 +67,11 @@ export async function getTrackingNumbersByBox(boxId: number): Promise<TrackingNu
   const result = await pool.query(`
     SELECT 
       t.*,
-      b.name as box_name
+      b.name as box_name,
+      p.name as postbox_name
     FROM tracking_numbers t
     LEFT JOIN boxes b ON t.box_id = b.id
+    LEFT JOIN postboxes p ON t.postbox_id = p.id
     WHERE t.box_id = $1
     ORDER BY t.created_at DESC
   `, [boxId]);
@@ -79,7 +86,9 @@ export async function getTrackingNumberById(id: number): Promise<TrackingNumber 
 export async function updateTrackingStatus(
   id: number,
   status: TrackingStatus,
-  statusDetails?: string
+  statusDetails?: string,
+  postboxId?: number | null,
+  customTimestamp?: Date | null
 ): Promise<TrackingNumber | null> {
   const client = await pool.connect();
   try {
@@ -88,10 +97,14 @@ export async function updateTrackingStatus(
     // Update tracking number
     const updateResult = await client.query(
       `UPDATE tracking_numbers 
-       SET current_status = $1, status_details = $2, updated_at = CURRENT_TIMESTAMP 
-       WHERE id = $3 
+       SET current_status = $1, 
+           status_details = $2, 
+           postbox_id = $3,
+           custom_timestamp = $4,
+           updated_at = CURRENT_TIMESTAMP 
+       WHERE id = $5 
        RETURNING *`,
-      [status, statusDetails || null, id]
+      [status, statusDetails || null, postboxId ?? null, customTimestamp || null, id]
     );
     
     if (updateResult.rows.length === 0) {
