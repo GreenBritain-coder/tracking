@@ -210,26 +210,25 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
           
           // JavaScript to accept cookie modal and navigate to tracking results
           // ScrapingAnt's js_snippet requires base64 encoding
+          // Use setTimeout with 3s delay and try multiple Royal Mail-specific selectors
           const jsCode = `
-            (function() {
-              // Try the specific selector first
-              const btn = document.querySelector('button[data-accept-cookies]');
-              if (btn) {
-                btn.click();
-              } else {
-                // Fallback: find by text content
-                const buttons = Array.from(document.querySelectorAll('button, a, [role="button"]'));
-                for (const btn of buttons) {
-                  const text = (btn.textContent || btn.innerText || '').toLowerCase().trim();
-                  if ((text.includes('accept') || text.includes('continue') || text === 'ok') && 
-                      text.length < 30 && btn.offsetParent !== null) {
-                    btn.click();
-                    break;
-                  }
+            setTimeout(() => {
+              const selectors = [
+                '[data-accept-cookies]',
+                '.cookie-accept',
+                '#accept-cookies',
+                'button[class*="cookie"]',
+                'button[class*="accept"]'
+              ];
+              for(let selector of selectors) {
+                const btn = document.querySelector(selector);
+                if(btn) {
+                  btn.click();
+                  break;
                 }
               }
-              ${isHashBased ? `window.location.hash = '#/tracking-results/${cleanTrackingNumber}';` : ''}
-            })();
+              ${isHashBased ? `setTimeout(() => { window.location.hash = '#/tracking-results/${cleanTrackingNumber}'; }, 1000);` : ''}
+            }, 3000);
           `.trim();
           
           // Base64 encode the JavaScript snippet
