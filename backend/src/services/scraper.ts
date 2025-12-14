@@ -134,38 +134,24 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
         try {
           console.log(`[${trackingNumber}] Trying URL: ${trackingUrl}`);
           
-          // Try accessing the main page first to establish a session, then navigate to tracking
-          // This mimics how a real browser would access the site
-          const mainPageUrl = trackingUrl.includes('track-trace') 
-            ? 'http://www.royalmail.com/track-trace'
-            : 'https://www.royalmail.com/track-your-item';
+          // Ensure URL is properly encoded
+          const encodedUrl = encodeURI(trackingUrl);
           
-          // First, visit main page to get cookies/session (if needed)
-          // Then navigate to tracking URL with query parameter
-          const jsSnippet = `
-            // First visit main page to establish session
-            window.location.href = '${mainPageUrl}';
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            // Then navigate to tracking URL
-            window.location.href = '${trackingUrl}';
-            await new Promise(resolve => setTimeout(resolve, 8000));
-            return true;
-          `.trim();
-          
+          // Simple direct approach - use the query parameter URL directly
+          // Royal Mail should process the query parameter and show tracking results
           const response = await axios.get('https://app.scrapingbee.com/api/v1/', {
             params: {
               api_key: SCRAPINGBEE_API_KEY,
-              url: mainPageUrl, // Start at main page
-              render_js: 'true', // Enable JavaScript rendering
-              js_snippet: Buffer.from(jsSnippet).toString('base64'), // Navigate to tracking URL
-              wait: '12000', // 12 second wait (2s for main page + 8s for tracking + 2s buffer)
+              url: encodedUrl, // Direct URL with properly encoded query parameter
+              render_js: 'true', // Enable JavaScript rendering for dynamic content
+              wait: '15000', // 15 second wait for page to fully load and process query param
               premium_proxy: 'true', // Use premium proxies for better success rate
-              block_resources: 'false', // Don't block any resources
+              block_resources: 'false', // Don't block any resources (as ScrapingBee suggests)
               window_width: '1920',
               window_height: '1080',
               country_code: 'GB', // UK geolocation
             },
-            timeout: 30000, // 30 second timeout for session establishment
+            timeout: 30000, // 30 second timeout
           });
           
           html = response.data;
