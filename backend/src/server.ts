@@ -45,9 +45,43 @@ app.use('/api/analytics', analyticsRoutes);
 // Webhook routes (no authentication required - uses signature verification)
 app.use('/api/webhook', webhookRoutes);
 
+// Debug middleware - log all requests to help diagnose routing issues
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} ${req.url}`);
+  next();
+});
+
+// 404 handler - return JSON instead of blank page
+app.use((req, res) => {
+  console.log(`[404] ${req.method} ${req.path} ${req.url} - Route not found`);
+  res.status(404).json({ 
+    error: 'Route not found',
+    method: req.method,
+    path: req.path,
+    url: req.url,
+    availableRoutes: [
+      '/health',
+      '/api/auth/*',
+      '/api/tracking/*',
+      '/api/analytics/*',
+      '/api/webhook/',
+      '/api/webhook/trackingmore/test',
+      '/api/webhook/trackingmore'
+    ]
+  });
+});
+
 // Start server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  console.log('Registered routes:');
+  console.log('  - GET /health');
+  console.log('  - /api/auth/*');
+  console.log('  - /api/tracking/*');
+  console.log('  - /api/analytics/*');
+  console.log('  - GET /api/webhook/');
+  console.log('  - GET /api/webhook/trackingmore/test');
+  console.log('  - POST /api/webhook/trackingmore');
   startScheduler();
 });
 
