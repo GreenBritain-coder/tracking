@@ -244,13 +244,21 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
           
           // Use cookies from Step 1 if we have them (bypasses cookie modal completely)
           if (cookies) {
-            params.cookies = cookies; // Format: cookie_name_1=cookie_value_1;cookie_name_2=cookie_value_2
+            // URL-encode cookies parameter properly
+            params.cookies = encodeURIComponent(cookies); // Format: cookie_name_1=cookie_value_1;cookie_name_2=cookie_value_2
             console.log(`[${trackingNumber}] Using cookies from main page (should bypass cookie modal)`);
           } else {
             // Fallback: use js_snippet to accept cookies if we don't have them
             params.js_snippet = jsSnippetBase64;
             console.log(`[${trackingNumber}] Using js_snippet to accept cookies (no cookies available)`);
           }
+          
+          // Wait for tracking content to appear after JavaScript runs
+          // This makes ScrapingAnt wait for the tracking content to load before returning HTML
+          // Try the most common Royal Mail tracking selectors
+          params.wait_for_selector = '.tracking-results'; // Primary selector
+          // Alternative: '[data-tracking-info]' if .tracking-results doesn't work
+          console.log(`[${trackingNumber}] Waiting for tracking content selector: ${params.wait_for_selector}`);
           
           const response = await axios.get('https://api.scrapingant.com/v2/general', {
             params,
