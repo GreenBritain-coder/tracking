@@ -154,20 +154,22 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
           // Don't try to manipulate cookies - let ScrapingBee and Royal Mail handle it
           const jsSnippet = null; // No JavaScript manipulation - keep it simple
           
-          // Simple, direct approach - just wait for Royal Mail to load
+          // Simple, direct approach - Royal Mail scraping is unreliable
+          // Using custom_google to potentially bypass cookie consent
           const response = await axios.get('https://app.scrapingbee.com/api/v1/', {
             params: {
               api_key: SCRAPINGBEE_API_KEY,
               url: encodedUrl, // Direct URL with properly encoded query parameter
               render_js: 'true', // Enable JavaScript rendering for dynamic content
-              wait: '20000', // 20 second wait - give Royal Mail plenty of time
+              wait: '15000', // 15 second wait
               premium_proxy: 'true', // Use premium proxies for better success rate
               block_resources: 'false', // Don't block any resources
               window_width: '1920',
               window_height: '1080',
               country_code: 'GB', // UK geolocation
+              custom_google: 'true', // May help bypass cookie consent banners
             },
-            timeout: 45000, // 45 second timeout
+            timeout: 35000, // 35 second timeout
           });
           
           html = response.data;
