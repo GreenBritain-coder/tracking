@@ -201,6 +201,8 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
               timeout: 30000,
             }
           );
+          console.log(`[${trackingNumber}] POST response status: ${createResponse.status}`);
+          console.log(`[${trackingNumber}] POST response body:`, JSON.stringify(createResponse.data, null, 2).substring(0, 1000));
           console.log(`[${trackingNumber}] Tracking created/updated in TrackingMore with courier code: ${code}`);
           
           // Check if POST response contains actual tracking data (not just empty array)
