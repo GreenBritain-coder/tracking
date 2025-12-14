@@ -84,14 +84,14 @@ export async function updateAllTrackingStatuses() {
 }
 
 export function startScheduler() {
-  // Run every 5 minutes
-  cron.schedule('*/5 * * * *', () => {
+  // Run every 4 hours (at the top of every 4th hour: 0:00, 4:00, 8:00, 12:00, 16:00, 20:00)
+  cron.schedule('0 */4 * * *', () => {
     updateAllTrackingStatuses();
   });
   
-  // Also run immediately on startup (optional, can be removed if desired)
-  console.log('Scheduler started. Will run every 5 minutes.');
-  // Uncomment to run on startup:
-  // updateAllTrackingStatuses();
+  // Also run immediately on startup to get initial status
+  console.log('Scheduler started. Will run every 4 hours.');
+  // Run on startup to get initial status
+  updateAllTrackingStatuses();
 }
 
