@@ -210,24 +210,9 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
     }
 
     // PRIORITY 1: Check for DELIVERED status (VERY STRICT - only past tense AND must have tracking content)
-    // First check: Do we have actual tracking content? If not, don't detect as delivered
-    const hasActualTrackingContent = textContent.length > 800 && (
-      textLower.includes('tracking number:') ||
-      textLower.includes('service used:') ||
-      textLower.includes('we have your item') ||
-      textLower.includes('we\'ve got it')
-    );
-    
-    if (!hasActualTrackingContent) {
-      console.log(`[${trackingNumber}] No actual tracking content found, defaulting to NOT_SCANNED`);
-      return { 
-        status: 'not_scanned', 
-        details: 'No tracking information loaded from Royal Mail',
-        statusHeader: statusHeader || undefined
-      };
-    }
-    
+    // Check for delivered status FIRST before validation (delivered pages might be shorter)
     const deliveredPhrases = [
+      'your item was delivered',
       'has been delivered',
       'was delivered',
       'successfully delivered',
@@ -237,6 +222,31 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
       'delivery completed',
       'delivery successful',
     ];
+    
+    // Check if this is a delivered status page
+    const hasDeliveredIndicator = deliveredPhrases.some(phrase => textLower.includes(phrase)) ||
+                                   textLower.includes('delivered') && textLower.includes('tracking number:');
+    
+    // Validation: Do we have actual tracking content?
+    // For delivered pages, accept shorter content (600+ chars) since they're simpler
+    // For other pages, require more content (800+ chars) to avoid false positives
+    const minLength = hasDeliveredIndicator ? 600 : 800;
+    const hasActualTrackingContent = textContent.length > minLength && (
+      textLower.includes('tracking number:') ||
+      textLower.includes('service used:') ||
+      textLower.includes('we have your item') ||
+      textLower.includes('we\'ve got it') ||
+      textLower.includes('delivered') // Delivered pages have "delivered" + tracking number
+    );
+    
+    if (!hasActualTrackingContent) {
+      console.log(`[${trackingNumber}] No actual tracking content found (length: ${textContent.length}, min: ${minLength}), defaulting to NOT_SCANNED`);
+      return { 
+        status: 'not_scanned', 
+        details: 'No tracking information loaded from Royal Mail',
+        statusHeader: statusHeader || undefined
+      };
+    }
 
     const deliveredRegex = /\b(has been delivered|was delivered|delivery completed)\b/i;
     const hasDeliveredKeyword = deliveredRegex.test(textLower);
