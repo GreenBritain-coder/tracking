@@ -134,20 +134,38 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
         try {
           console.log(`[${trackingNumber}] Trying URL: ${trackingUrl}`);
           
-          // Simple approach - no js_snippet needed, just direct URL with query parameter
+          // Try accessing the main page first to establish a session, then navigate to tracking
+          // This mimics how a real browser would access the site
+          const mainPageUrl = trackingUrl.includes('track-trace') 
+            ? 'http://www.royalmail.com/track-trace'
+            : 'https://www.royalmail.com/track-your-item';
+          
+          // First, visit main page to get cookies/session (if needed)
+          // Then navigate to tracking URL with query parameter
+          const jsSnippet = `
+            // First visit main page to establish session
+            window.location.href = '${mainPageUrl}';
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            // Then navigate to tracking URL
+            window.location.href = '${trackingUrl}';
+            await new Promise(resolve => setTimeout(resolve, 8000));
+            return true;
+          `.trim();
+          
           const response = await axios.get('https://app.scrapingbee.com/api/v1/', {
             params: {
               api_key: SCRAPINGBEE_API_KEY,
-              url: trackingUrl, // Direct URL with query parameter
-              render_js: 'true', // Enable JavaScript rendering for dynamic content
-              wait: '10000', // 10 second wait (reduced to save credits)
+              url: mainPageUrl, // Start at main page
+              render_js: 'true', // Enable JavaScript rendering
+              js_snippet: Buffer.from(jsSnippet).toString('base64'), // Navigate to tracking URL
+              wait: '12000', // 12 second wait (2s for main page + 8s for tracking + 2s buffer)
               premium_proxy: 'true', // Use premium proxies for better success rate
               block_resources: 'false', // Don't block any resources
               window_width: '1920',
               window_height: '1080',
               country_code: 'GB', // UK geolocation
             },
-            timeout: 25000, // Reduced timeout to 25s (saves credits on failures)
+            timeout: 30000, // 30 second timeout for session establishment
           });
           
           html = response.data;
@@ -209,19 +227,43 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
             // Continue to next URL format
           }
         } catch (requestError) {
-          // Handle 503 Service Unavailable (ScrapingBee infrastructure issue)
-          if (axios.isAxiosError(requestError) && requestError.response?.status === 503) {
-            console.warn(`[${trackingNumber}] ScrapingBee returned 503 (Service Unavailable) with URL: ${trackingUrl}`);
-            // Try next URL format on 503
-            continue;
-          } else if (axios.isAxiosError(requestError) && requestError.code === 'ECONNABORTED') {
-            console.warn(`[${trackingNumber}] Request timed out with URL: ${trackingUrl}, trying next URL format...`);
-            // Try next URL format on timeout
-            continue;
+          // Handle different error types
+          if (axios.isAxiosError(requestError)) {
+            const status = requestError.response?.status;
+            const statusText = requestError.response?.statusText;
+            
+            if (status === 401) {
+              // 401 Unauthorized - Royal Mail is blocking ScrapingBee
+              console.warn(`[${trackingNumber}] ⚠️ ScrapingBee returned 401 (Unauthorized) with URL: ${trackingUrl}`);
+              console.warn(`[${trackingNumber}] This likely means Royal Mail is blocking ScrapingBee's requests`);
+              // Try next URL format - maybe a different URL will work
+              continue;
+            } else if (status === 403) {
+              // 403 Forbidden - Similar to 401, blocked access
+              console.warn(`[${trackingNumber}] ⚠️ ScrapingBee returned 403 (Forbidden) with URL: ${trackingUrl}`);
+              continue;
+            } else if (status === 503) {
+              // 503 Service Unavailable (ScrapingBee infrastructure issue)
+              console.warn(`[${trackingNumber}] ⚠️ ScrapingBee returned 503 (Service Unavailable) with URL: ${trackingUrl}`);
+              // Try next URL format on 503
+              continue;
+            } else if (requestError.code === 'ECONNABORTED') {
+              console.warn(`[${trackingNumber}] ⚠️ Request timed out with URL: ${trackingUrl}, trying next URL format...`);
+              // Try next URL format on timeout
+              continue;
+            } else {
+              // Other errors - log details and try next URL format
+              console.warn(`[${trackingNumber}] ⚠️ Error with URL ${trackingUrl}:`, 
+                status ? `${status} ${statusText}` : requestError.message);
+              if (requestError.response?.data) {
+                console.warn(`[${trackingNumber}] Response data:`, JSON.stringify(requestError.response.data).substring(0, 200));
+              }
+              continue;
+            }
           } else {
-            // Other errors - log and try next URL format
-            console.warn(`[${trackingNumber}] Error with URL ${trackingUrl}:`, 
-              axios.isAxiosError(requestError) ? requestError.message : 'Unknown error');
+            // Non-Axios errors
+            console.warn(`[${trackingNumber}] ⚠️ Non-Axios error with URL ${trackingUrl}:`, 
+              requestError instanceof Error ? requestError.message : 'Unknown error');
             continue;
           }
         }
