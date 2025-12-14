@@ -186,72 +186,85 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
     
     try {
       // Step 1: Create tracking in TrackingMore (if not already exists)
-      // Try different courier codes for Royal Mail - prioritize royal-mail (works per curl example)
-      const courierCodes = ['royal-mail', 'royalmail'];
-      let courierCode = courierCodes[0];
+      // Use only 'royal-mail' as 'royalmail' is invalid (returns 4120)
+      const courierCode = 'royal-mail';
       let trackingCreated = false;
       
-      for (const code of courierCodes) {
-        try {
-          console.log(`[${trackingNumber}] Creating tracking in TrackingMore with courier code: ${code}...`);
-          const requestBody = {
-            tracking_number: cleanTrackingNumber,
-            courier_code: code,
-          };
-          
-          // Use the correct endpoint: /trackings/create
-          const createResponse = await axios.post(
-            `${TRACKINGMORE_API_BASE}/trackings/create`,
-            requestBody,
-            {
-              headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-                'Tracking-Api-Key': TRACKINGMORE_API_KEY,
-              },
-              timeout: 30000,
-            }
-          );
-          console.log(`[${trackingNumber}] Created via /trackings/create endpoint`);
-          console.log(`[${trackingNumber}] POST response status: ${createResponse.status}`);
-          console.log(`[${trackingNumber}] POST response body:`, JSON.stringify(createResponse.data, null, 2).substring(0, 1000));
-          
-          // Check meta.code in response - 200 means success
-          const metaCode = createResponse.data?.meta?.code;
-          const metaMessage = createResponse.data?.meta?.message || '';
-          
-          if (metaCode === 200) {
-            // Check if data exists - new API returns data object with id, tracking_number, etc.
-            if (createResponse.data?.data) {
-              const dataObj = createResponse.data.data;
-              // Check if it's an object with tracking info (new API format)
-              if (!Array.isArray(dataObj) && (dataObj.id || dataObj.tracking_number)) {
-                console.log(`[${trackingNumber}] Tracking successfully created in TrackingMore with courier code: ${code}`);
-                // Use the response data directly - it contains the tracking info
-                return parseTrackingMoreResponse(createResponse.data, trackingNumber);
-              } else if (Array.isArray(dataObj) && dataObj.length > 0) {
-                // Array format (old API)
-                console.log(`[${trackingNumber}] Tracking created/updated (200) in TrackingMore with courier code: ${code}`);
-                return parseTrackingMoreResponse(createResponse.data, trackingNumber);
-              } else {
-                console.warn(`[${trackingNumber}] POST returned 200 but data is empty or invalid`);
-              }
+      try {
+        console.log(`[${trackingNumber}] Creating tracking in TrackingMore with courier code: ${courierCode}...`);
+        const requestBody = {
+          tracking_number: cleanTrackingNumber,
+          courier_code: courierCode,
+        };
+        
+        // Add delay to avoid rate limiting (429 errors)
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+        // Use the correct endpoint: /trackings/create
+        const createResponse = await axios.post(
+          `${TRACKINGMORE_API_BASE}/trackings/create`,
+          requestBody,
+          {
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+              'Tracking-Api-Key': TRACKINGMORE_API_KEY,
+            },
+            timeout: 30000,
+          }
+        );
+        console.log(`[${trackingNumber}] Created via /trackings/create endpoint`);
+        console.log(`[${trackingNumber}] POST response status: ${createResponse.status}`);
+        console.log(`[${trackingNumber}] POST response body:`, JSON.stringify(createResponse.data, null, 2).substring(0, 1000));
+        
+        // Check meta.code in response - 200 means success
+        const metaCode = createResponse.data?.meta?.code;
+        const metaMessage = createResponse.data?.meta?.message || '';
+        
+        if (metaCode === 200) {
+          // Check if data exists - new API returns data object with id, tracking_number, etc.
+          if (createResponse.data?.data) {
+            const dataObj = createResponse.data.data;
+            // Check if it's an object with tracking info (new API format)
+            if (!Array.isArray(dataObj) && (dataObj.id || dataObj.tracking_number)) {
+              console.log(`[${trackingNumber}] Tracking successfully created in TrackingMore with courier code: ${courierCode}`);
+              // Use the response data directly - it contains the tracking info
+              return parseTrackingMoreResponse(createResponse.data, trackingNumber);
+            } else if (Array.isArray(dataObj) && dataObj.length > 0) {
+              // Array format (old API)
+              console.log(`[${trackingNumber}] Tracking created/updated (200) in TrackingMore with courier code: ${courierCode}`);
+              return parseTrackingMoreResponse(createResponse.data, trackingNumber);
             } else {
-              console.warn(`[${trackingNumber}] POST returned 200 but no data field`);
+              console.warn(`[${trackingNumber}] POST returned 200 but data is empty or invalid`);
             }
           } else {
-            console.warn(`[${trackingNumber}] POST returned meta.code ${metaCode}: ${metaMessage}`);
+            console.warn(`[${trackingNumber}] POST returned 200 but no data field`);
           }
+        } else {
+          console.warn(`[${trackingNumber}] POST returned meta.code ${metaCode}: ${metaMessage}`);
+        }
+        
+        trackingCreated = true;
+      } catch (createError) {
+        if (axios.isAxiosError(createError) && createError.response) {
+          const errorData = createError.response.data;
+          const errorCode = errorData?.meta?.code;
+          const errorStatus = createError.response.status;
           
-          courierCode = code;
-          trackingCreated = true;
-          break;
-        } catch (createError) {
-          // If tracking already exists (409), check if response has data we can use
-          if (axios.isAxiosError(createError) && createError.response?.status === 409) {
-            console.log(`[${trackingNumber}] Tracking already exists in TrackingMore with courier code: ${code}`);
-            // Check if 409 response includes tracking data
-            const errorData = createError.response.data;
+          // Handle 400 with code 4101: "Tracking No. already exists" - response includes tracking data
+          if (errorStatus === 400 && errorCode === 4101) {
+            console.log(`[${trackingNumber}] Tracking already exists in TrackingMore (4101), using data from response`);
+            if (errorData?.data && (!Array.isArray(errorData.data) || errorData.data.length > 0)) {
+              if (!Array.isArray(errorData.data) && Object.keys(errorData.data).length > 0) {
+                console.log(`[${trackingNumber}] 400/4101 response contains tracking data, using it`);
+                return parseTrackingMoreResponse(errorData, trackingNumber);
+              }
+            }
+            trackingCreated = true; // Tracking exists, we can try to GET it
+          }
+          // Handle 409: Tracking already exists (alternative status code)
+          else if (errorStatus === 409) {
+            console.log(`[${trackingNumber}] Tracking already exists in TrackingMore (409)`);
             if (errorData?.data) {
               if ((Array.isArray(errorData.data) && errorData.data.length > 0) ||
                   (!Array.isArray(errorData.data) && Object.keys(errorData.data).length > 0)) {
@@ -259,20 +272,27 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
                 return parseTrackingMoreResponse(errorData, trackingNumber);
               }
             }
-            courierCode = code;
-            trackingCreated = true;
-            break;
-          } else if (axios.isAxiosError(createError) && createError.response) {
-            const errorData = createError.response.data;
-            console.warn(`[${trackingNumber}] Failed to create tracking with courier code ${code}:`, 
-              `${createError.response.status} ${createError.response.statusText}`,
-              JSON.stringify(errorData));
-            // If it's a 404 or invalid courier code, try next one
-            if (createError.response.status === 404 || 
-                (errorData?.meta?.code === 4130 && errorData?.meta?.message?.includes('courier'))) {
-              continue; // Try next courier code
-            }
+            trackingCreated = true; // Tracking exists, we can try to GET it
           }
+          // Handle 429: Rate limit exceeded
+          else if (errorStatus === 429) {
+            console.warn(`[${trackingNumber}] Rate limit exceeded (429), will try to fetch existing tracking after delay`);
+            // Wait longer before trying GET
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            trackingCreated = true; // Assume it might exist, try to GET it
+          }
+          // Handle 4120: Invalid courier code (shouldn't happen with royal-mail, but log it)
+          else if (errorCode === 4120) {
+            console.warn(`[${trackingNumber}] Invalid courier code (4120): ${errorData?.meta?.message}`);
+          }
+          // Other errors
+          else {
+            console.warn(`[${trackingNumber}] Failed to create tracking:`, 
+              `${errorStatus} ${createError.response.statusText}`,
+              JSON.stringify(errorData).substring(0, 200));
+          }
+        } else {
+          console.warn(`[${trackingNumber}] Failed to create tracking:`, createError);
         }
       }
       
@@ -285,10 +305,14 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
       }
       
       // Wait longer for TrackingMore to process the tracking (especially if it was just created)
+      // Also add delay to avoid rate limiting
       await new Promise(resolve => setTimeout(resolve, 5000));
       
       // Try to GET the tracking data using the correct endpoint: /trackings/get?tracking_numbers=...
       try {
+        // Add delay before GET to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
         console.log(`[${trackingNumber}] Fetching tracking data from TrackingMore using GET API...`);
         const getResponse = await axios.get(
           `${TRACKINGMORE_API_BASE}/trackings/get`,
@@ -328,8 +352,17 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
         }
       } catch (getError) {
         if (axios.isAxiosError(getError) && getError.response) {
-          console.warn(`[${trackingNumber}] GET failed (${getError.response.status}):`,
-            JSON.stringify(getError.response.data).substring(0, 200));
+          const errorStatus = getError.response.status;
+          const errorData = getError.response.data;
+          
+          // Handle 429: Rate limit exceeded
+          if (errorStatus === 429) {
+            console.warn(`[${trackingNumber}] GET rate limit exceeded (429), returning not_scanned`);
+            // Don't retry immediately to avoid further rate limiting
+          } else {
+            console.warn(`[${trackingNumber}] GET failed (${errorStatus}):`,
+              JSON.stringify(errorData).substring(0, 200));
+          }
         } else {
           console.warn(`[${trackingNumber}] GET failed:`, getError);
         }
