@@ -379,29 +379,56 @@ export default function Dashboard() {
                             const pastedText = e.clipboardData.getData('text').trim();
                             console.log('Pasted text:', pastedText); // Debug log
                             
-                            // Try to parse the pasted text as a date
+                            // Try to parse the pasted text as a date with time
                             let parsedDate = '';
+                            let parsedTime = '00:00:00'; // Default to midnight
                             
-                            // Try ISO format first (YYYY-MM-DD or YYYY-MM-DD HH:MM)
-                            if (/^\d{4}-\d{2}-\d{2}(\s+\d{1,2}:\d{2})?$/.test(pastedText)) {
-                              parsedDate = pastedText.split(' ')[0]; // Extract just the date part
-                            } 
-                            // Try DD/MM/YYYY HH:MM or DD/MM/YYYY (UK format with optional time)
-                            else if (/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}(\s+\d{1,2}:\d{2})?$/.test(pastedText)) {
-                              const datePart = pastedText.split(' ')[0]; // Extract just the date part
+                            // Handle formats with comma: "12/09/2025, 01:00:00" or "12/09/2025,01:00:00"
+                            const commaMatch = pastedText.match(/^(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})[,\s]+(\d{1,2}:\d{2}(?::\d{2})?)/);
+                            if (commaMatch) {
+                              const datePart = commaMatch[1];
+                              const timePart = commaMatch[2];
                               const parts = datePart.split(/[\/\-]/);
                               const day = parts[0].padStart(2, '0');
                               const month = parts[1].padStart(2, '0');
                               const year = parts[2];
                               parsedDate = `${year}-${month}-${day}`;
-                              console.log('Converted to:', parsedDate); // Debug log
+                              // Normalize time format (ensure HH:MM:SS)
+                              const timeParts = timePart.split(':');
+                              parsedTime = `${timeParts[0].padStart(2, '0')}:${(timeParts[1] || '00').padStart(2, '0')}:${(timeParts[2] || '00').padStart(2, '0')}`;
+                              console.log('Converted (comma format):', parsedDate, parsedTime);
+                            }
+                            // Try ISO format first (YYYY-MM-DD or YYYY-MM-DD HH:MM)
+                            else if (/^\d{4}-\d{2}-\d{2}(\s+\d{1,2}:\d{2}(?::\d{2})?)?$/.test(pastedText)) {
+                              const parts = pastedText.split(/\s+/);
+                              parsedDate = parts[0];
+                              if (parts[1]) {
+                                const timeParts = parts[1].split(':');
+                                parsedTime = `${timeParts[0].padStart(2, '0')}:${(timeParts[1] || '00').padStart(2, '0')}:${(timeParts[2] || '00').padStart(2, '0')}`;
+                              }
+                            } 
+                            // Try DD/MM/YYYY HH:MM or DD/MM/YYYY (UK format with optional time)
+                            else if (/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}(\s+\d{1,2}:\d{2}(?::\d{2})?)?$/.test(pastedText)) {
+                              const parts = pastedText.split(/\s+/);
+                              const datePart = parts[0];
+                              const dateParts = datePart.split(/[\/\-]/);
+                              const day = dateParts[0].padStart(2, '0');
+                              const month = dateParts[1].padStart(2, '0');
+                              const year = dateParts[2];
+                              parsedDate = `${year}-${month}-${day}`;
+                              if (parts[1]) {
+                                const timeParts = parts[1].split(':');
+                                parsedTime = `${timeParts[0].padStart(2, '0')}:${(timeParts[1] || '00').padStart(2, '0')}:${(timeParts[2] || '00').padStart(2, '0')}`;
+                              }
+                              console.log('Converted (UK format):', parsedDate, parsedTime);
                             }
                             // Try to parse as Date object (handles various formats including with time)
                             else {
                               const date = new Date(pastedText);
                               if (!isNaN(date.getTime())) {
                                 parsedDate = date.toISOString().slice(0, 10);
-                                console.log('Parsed via Date object:', parsedDate); // Debug log
+                                parsedTime = date.toISOString().slice(11, 19);
+                                console.log('Parsed via Date object:', parsedDate, parsedTime);
                               }
                             }
                             
@@ -409,8 +436,9 @@ export default function Dashboard() {
                               // Use setTimeout to ensure React state update happens after browser validation
                               setTimeout(() => {
                                 setCustomTimestamp(parsedDate);
-                                // Auto-save after paste
-                                const dateTimestamp = new Date(parsedDate + 'T00:00:00Z').toISOString();
+                                // Auto-save after paste with the correct time
+                                // Use local timezone for the time, then convert to UTC
+                                const dateTimestamp = new Date(`${parsedDate}T${parsedTime}`).toISOString();
                                 handleStatusChange(tn.id, tn.current_status, tn.postbox_id, dateTimestamp);
                               }, 0);
                             } else {
