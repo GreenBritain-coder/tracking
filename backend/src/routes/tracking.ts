@@ -206,12 +206,13 @@ router.patch(
   '/numbers/:id/status',
   [
     body('status').isIn(['not_scanned', 'scanned', 'delivered']),
-    body('postbox_id').optional().isInt().toInt(),
-    body('custom_timestamp').optional().isISO8601().toDate(),
+    body('postbox_id').optional({ nullable: true, checkFalsy: true }).isInt().toInt(),
+    body('custom_timestamp').optional({ nullable: true, checkFalsy: true }).isISO8601().toDate(),
   ],
   async (req: AuthRequest, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.error('Validation errors:', errors.array());
       return res.status(400).json({ errors: errors.array() });
     }
 
@@ -224,11 +225,23 @@ router.patch(
         return res.status(404).json({ error: 'Tracking number not found' });
       }
 
-      // Validate postbox_id if provided
-      if (postbox_id !== undefined && postbox_id !== null) {
-        const postbox = await getPostboxById(postbox_id);
-        if (!postbox) {
-          return res.status(400).json({ error: 'Postbox not found' });
+      // Validate postbox_id if provided (and not null/empty)
+      if (postbox_id !== undefined && postbox_id !== null && postbox_id !== '') {
+        const postboxIdNum = typeof postbox_id === 'string' ? parseInt(postbox_id) : postbox_id;
+        if (!isNaN(postboxIdNum)) {
+          const postbox = await getPostboxById(postboxIdNum);
+          if (!postbox) {
+            return res.status(400).json({ error: 'Postbox not found' });
+          }
+        }
+      }
+
+      // Normalize postbox_id: convert empty string to null, ensure it's a number or null
+      let normalizedPostboxId: number | null = null;
+      if (postbox_id !== undefined && postbox_id !== null && postbox_id !== '') {
+        const postboxIdNum = typeof postbox_id === 'string' ? parseInt(postbox_id) : postbox_id;
+        if (!isNaN(postboxIdNum)) {
+          normalizedPostboxId = postboxIdNum;
         }
       }
 
@@ -236,7 +249,7 @@ router.patch(
         Number(id), 
         status, 
         undefined, 
-        postbox_id ?? null,
+        normalizedPostboxId,
         custom_timestamp || null
       );
       
