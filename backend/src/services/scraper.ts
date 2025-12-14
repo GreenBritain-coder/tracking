@@ -232,17 +232,26 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
           console.log(`[${trackingNumber}] POST response status: ${createResponse.status}`);
           console.log(`[${trackingNumber}] POST response body:`, JSON.stringify(createResponse.data, null, 2).substring(0, 1000));
           
-          // Check if tracking was actually created (201 Created) vs just accepted (200 OK)
-          if (createResponse.status === 201) {
-            console.log(`[${trackingNumber}] Tracking successfully CREATED (201) in TrackingMore with courier code: ${code}`);
-          } else if (createResponse.status === 200) {
-            // 200 with empty data might mean request accepted but tracking not created
+          // Check meta.code in response - 200 means success, but check if there are any warnings
+          const metaCode = createResponse.data?.meta?.code;
+          const metaMessage = createResponse.data?.meta?.message || '';
+          
+          if (metaCode === 200) {
+            // Check if data is empty - this might mean it was accepted but not created
             if (!createResponse.data?.data || 
                 (Array.isArray(createResponse.data.data) && createResponse.data.data.length === 0)) {
-              console.warn(`[${trackingNumber}] POST returned 200 with empty data - tracking may not have been created in TrackingMore`);
+              console.warn(`[${trackingNumber}] POST returned 200 with empty data - shipment may not have been created`);
+              console.warn(`[${trackingNumber}] This could indicate: API key lacks create permissions, or shipment needs time to appear`);
             } else {
-              console.log(`[${trackingNumber}] Tracking created/updated (200) in TrackingMore with courier code: ${code}`);
+              console.log(`[${trackingNumber}] Shipment created/updated (200) in TrackingMore with courier code: ${code}`);
             }
+          } else {
+            console.warn(`[${trackingNumber}] POST returned meta.code ${metaCode}: ${metaMessage}`);
+          }
+          
+          // Check if tracking was actually created (201 Created) vs just accepted (200 OK)
+          if (createResponse.status === 201) {
+            console.log(`[${trackingNumber}] Shipment successfully CREATED (201) in TrackingMore with courier code: ${code}`);
           }
           
           // Check if POST response contains actual tracking data (not just empty array)
