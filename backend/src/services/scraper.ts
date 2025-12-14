@@ -162,28 +162,63 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
           // ScrapingAnt API: https://api.scrapingant.com/v2/general
           // Uses x-api-key as query parameter
           // browser=true enables JavaScript rendering
-          // Add JavaScript to accept cookie modal
+          // js_code parameter executes JavaScript (plain text, not base64)
           const isHashBased = trackingUrl.includes('#/tracking-results/');
+          
+          // JavaScript to accept cookie modal and navigate to tracking results
+          // ScrapingAnt's js_code accepts plain JavaScript (not base64 encoded)
           const jsCode = `
             (async function() {
               // Wait for page to load
               await new Promise(resolve => setTimeout(resolve, 2000));
               
-              // Find and click cookie modal accept button
-              const buttons = Array.from(document.querySelectorAll('button, a, [role="button"]'));
-              for (const btn of buttons) {
-                const text = (btn.textContent || btn.innerText || '').toLowerCase().trim();
-                if ((text.includes('accept') || text.includes('continue') || text === 'ok') && 
-                    text.length < 30) {
-                  try {
+              // Try multiple selectors for cookie accept button
+              const selectors = [
+                'button[aria-label*="Accept" i]',
+                'button[aria-label*="Continue" i]',
+                'a[aria-label*="Accept" i]',
+                'a[aria-label*="Continue" i]',
+                '[role="button"][aria-label*="Accept" i]',
+                '[role="button"][aria-label*="Continue" i]',
+                'button[id*="accept" i]',
+                'button[id*="continue" i]',
+                'button[class*="accept" i]',
+                'button[class*="continue" i]',
+                'a[id*="accept" i]',
+                'a[id*="continue" i]'
+              ];
+              
+              let clicked = false;
+              for (const selector of selectors) {
+                try {
+                  const btn = document.querySelector(selector);
+                  if (btn && btn.offsetParent !== null) { // Check if visible
                     btn.click();
+                    clicked = true;
                     await new Promise(resolve => setTimeout(resolve, 2000));
                     break;
-                  } catch(e) {}
+                  }
+                } catch(e) {}
+              }
+              
+              // Fallback: find by text content (more reliable)
+              if (!clicked) {
+                const buttons = Array.from(document.querySelectorAll('button, a, [role="button"]'));
+                for (const btn of buttons) {
+                  const text = (btn.textContent || btn.innerText || '').toLowerCase().trim();
+                  if ((text.includes('accept') || text.includes('continue') || text === 'ok') && 
+                      text.length < 30 && btn.offsetParent !== null) { // Check if visible
+                    try {
+                      btn.click();
+                      clicked = true;
+                      await new Promise(resolve => setTimeout(resolve, 2000));
+                      break;
+                    } catch(e) {}
+                  }
                 }
               }
               
-              // For hash-based URLs, ensure hash is set
+              // For hash-based URLs, ensure hash is set after accepting cookies
               if (${isHashBased ? 'true' : 'false'}) {
                 window.location.hash = '#/tracking-results/${cleanTrackingNumber}';
                 await new Promise(resolve => setTimeout(resolve, 3000));
@@ -191,19 +226,15 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
             })();
           `.trim();
           
-          // Build params object - try js_code if ScrapingAnt supports it
+          // Build params object
           const params: any = {
             url: encodedUrl,
             'x-api-key': SCRAPINGANT_API_KEY,
             browser: 'true',
-            wait: '20000', // Reduced to 20s to prevent timeouts (free plan is slower)
+            wait: '25000', // 25 seconds: 2s initial + 2s cookie click + 3s hash nav + 18s content load
             proxy_country: 'GB',
+            js_code: jsCode, // ScrapingAnt supports js_code parameter (plain JavaScript)
           };
-          
-          // Try adding js_code if ScrapingAnt supports it (may not be available on free plan)
-          if (jsCode) {
-            params.js_code = jsCode;
-          }
           
           const response = await axios.get('https://api.scrapingant.com/v2/general', {
             params,
