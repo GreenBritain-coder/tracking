@@ -375,7 +375,10 @@ export default function Dashboard() {
                           onChange={(e) => setCustomTimestamp(e.target.value)}
                           onPaste={(e) => {
                             e.preventDefault();
+                            e.stopPropagation();
                             const pastedText = e.clipboardData.getData('text').trim();
+                            console.log('Pasted text:', pastedText); // Debug log
+                            
                             // Try to parse the pasted text as a date
                             let parsedDate = '';
                             
@@ -391,17 +394,24 @@ export default function Dashboard() {
                               const month = parts[1].padStart(2, '0');
                               const year = parts[2];
                               parsedDate = `${year}-${month}-${day}`;
+                              console.log('Converted to:', parsedDate); // Debug log
                             }
                             // Try to parse as Date object (handles various formats including with time)
                             else {
                               const date = new Date(pastedText);
                               if (!isNaN(date.getTime())) {
                                 parsedDate = date.toISOString().slice(0, 10);
+                                console.log('Parsed via Date object:', parsedDate); // Debug log
                               }
                             }
                             
                             if (parsedDate) {
-                              setCustomTimestamp(parsedDate);
+                              // Use setTimeout to ensure React state update happens after browser validation
+                              setTimeout(() => {
+                                setCustomTimestamp(parsedDate);
+                              }, 0);
+                            } else {
+                              console.warn('Could not parse pasted date:', pastedText);
                             }
                           }}
                           onBlur={() => {
