@@ -76,6 +76,17 @@ function extractStatusHeader(webhookData: any): string | undefined {
 }
 
 /**
+ * Root test endpoint - verify webhook router is accessible
+ */
+router.get('/', (req: Request, res: Response) => {
+  console.log('Webhook root endpoint accessed');
+  res.json({ 
+    message: 'Webhook router is accessible',
+    endpoints: ['GET /trackingmore/test', 'POST /trackingmore']
+  });
+});
+
+/**
  * Test endpoint to verify webhook route is accessible
  * This should return JSON, not a blank page
  * Must be defined BEFORE the catch-all route
@@ -85,6 +96,7 @@ router.get('/trackingmore/test', (req: Request, res: Response) => {
   console.log('Method:', req.method);
   console.log('Path:', req.path);
   console.log('URL:', req.url);
+  console.log('Original URL:', req.originalUrl);
   
   try {
     res.setHeader('Content-Type', 'application/json');
@@ -93,13 +105,15 @@ router.get('/trackingmore/test', (req: Request, res: Response) => {
       timestamp: new Date().toISOString(),
       webhookSecretConfigured: !!WEBHOOK_SECRET,
       path: '/api/webhook/trackingmore/test',
-      method: req.method
+      method: req.method,
+      routerPath: req.path,
+      originalUrl: req.originalUrl
     };
     console.log('Sending response:', response);
     res.json(response);
   } catch (error) {
     console.error('Error in test endpoint:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Internal server error', details: error instanceof Error ? error.message : String(error) });
   }
 });
 
