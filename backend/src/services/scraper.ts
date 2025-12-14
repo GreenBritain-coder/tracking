@@ -108,11 +108,13 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
     // Clean tracking number (remove spaces) for URL
     const cleanTrackingNumber = trackingNumber.replace(/\s+/g, '');
     
-    // Try multiple URL formats - Royal Mail supports query parameter format
+    // Try multiple URL formats - Royal Mail supports both query parameter and hash-based routing
+    // Hash-based worked for one tracking number, so try that first
     const urlFormats = [
-      `http://www.royalmail.com/track-trace?trackNumber=${cleanTrackingNumber}`,
-      `https://www.royalmail.com/track-trace?trackNumber=${cleanTrackingNumber}`,
-      `https://www.royalmail.com/track-your-item?trackNumber=${cleanTrackingNumber}`,
+      `https://www.royalmail.com/track-your-item#/tracking-results/${cleanTrackingNumber}`, // Hash-based (worked before)
+      `https://www.royalmail.com/track-trace?trackNumber=${cleanTrackingNumber}`, // Query param (HTTPS)
+      `http://www.royalmail.com/track-trace?trackNumber=${cleanTrackingNumber}`, // Query param (HTTP)
+      `https://www.royalmail.com/track-your-item?trackNumber=${cleanTrackingNumber}`, // Alternative query param
     ];
     
     // Retry up to 2 times to save credits
@@ -137,27 +139,56 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
           // Ensure URL is properly encoded
           const encodedUrl = encodeURI(trackingUrl);
           
-          // Use JavaScript to accept cookies and wait for query parameter to be processed
-          // Royal Mail shows a cookie banner that needs to be accepted before tracking loads
+          // Use JavaScript to accept cookies and wait for content to load
+          // Handle both hash-based routing and query parameter formats
+          const isHashBased = trackingUrl.includes('#/tracking-results/');
           const jsSnippet = `
             (async function() {
-              // Accept cookies if banner is present (simplified - just look for common accept buttons)
+              // Accept cookies if banner is present - try multiple selectors
               try {
-                const acceptBtn = Array.from(document.querySelectorAll('button, a')).find(btn => {
-                  const text = (btn.textContent || '').toLowerCase();
-                  return (text.includes('accept') || text.includes('continue')) && 
-                         (text.includes('cookie') || text.includes('privacy') || text.length < 20);
-                });
-                if (acceptBtn) {
-                  acceptBtn.click();
+                // Try multiple ways to find and click accept button
+                let clicked = false;
+                
+                // Method 1: Look for button with "accept" or "continue" text
+                const buttons = Array.from(document.querySelectorAll('button, a, [role="button"]'));
+                for (const btn of buttons) {
+                  const text = (btn.textContent || btn.innerText || '').toLowerCase().trim();
+                  if ((text.includes('accept') || text.includes('continue') || text === 'ok') && 
+                      (text.includes('cookie') || text.includes('privacy') || text.length < 25)) {
+                    btn.click();
+                    clicked = true;
+                    break;
+                  }
+                }
+                
+                // Method 2: Look for common cookie banner IDs/classes
+                if (!clicked) {
+                  const cookieBanner = document.querySelector('[id*="cookie"], [class*="cookie"], [id*="privacy"], [class*="privacy"]');
+                  if (cookieBanner) {
+                    const acceptBtn = cookieBanner.querySelector('button, a');
+                    if (acceptBtn) {
+                      acceptBtn.click();
+                      clicked = true;
+                    }
+                  }
+                }
+                
+                if (clicked) {
                   await new Promise(resolve => setTimeout(resolve, 2000));
                 }
-              } catch(e) {}
+              } catch(e) {
+                console.log('Cookie acceptance error:', e);
+              }
               
-              // Wait for tracking content to load (simplified check)
+              // For hash-based URLs, wait for hash routing to process
+              if (${isHashBased ? 'true' : 'false'}) {
+                await new Promise(resolve => setTimeout(resolve, 3000));
+              }
+              
+              // Wait for tracking content to load
               const trackingNumber = '${cleanTrackingNumber}';
               let attempts = 0;
-              const maxAttempts = 20; // 10 seconds max (20 * 500ms) - reduced from 30
+              const maxAttempts = 24; // 12 seconds max (24 * 500ms)
               
               while (attempts < maxAttempts) {
                 const text = (document.body.innerText || document.body.textContent || '').toLowerCase();
@@ -166,6 +197,7 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
                                         text.includes('delivered') ||
                                         text.includes("we've got it") ||
                                         text.includes('expect to deliver') ||
+                                        text.includes('on its way') ||
                                         text.includes(trackingNumber.toLowerCase());
                 
                 // Make sure it's not just the search form
