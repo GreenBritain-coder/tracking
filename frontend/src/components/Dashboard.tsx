@@ -85,6 +85,16 @@ export default function Dashboard() {
     }
   };
 
+  const handleStatusChange = async (id: number, newStatus: 'not_scanned' | 'scanned' | 'delivered') => {
+    try {
+      await api.updateTrackingStatus(id, newStatus);
+      // Reload data to show updated status
+      loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to update status');
+    }
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString();
   };
@@ -220,12 +230,23 @@ export default function Dashboard() {
                   <td>{formatDate(tn.created_at)}</td>
                   <td>{formatDate(tn.updated_at)}</td>
                   <td>
-                    <button
-                      onClick={() => handleDelete(tn.id)}
-                      className="delete-btn"
-                    >
-                      Delete
-                    </button>
+                    <div className="action-buttons">
+                      <select
+                        value={tn.current_status}
+                        onChange={(e) => handleStatusChange(tn.id, e.target.value as 'not_scanned' | 'scanned' | 'delivered')}
+                        className="status-select"
+                      >
+                        <option value="not_scanned">🔴 Not Scanned</option>
+                        <option value="scanned">🟡 Scanned</option>
+                        <option value="delivered">🟢 Delivered</option>
+                      </select>
+                      <button
+                        onClick={() => handleDelete(tn.id)}
+                        className="delete-btn"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))

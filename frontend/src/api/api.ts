@@ -42,6 +42,8 @@ export const api = {
     }),
   deleteTrackingNumber: (id: number) =>
     axios.delete(`${API_URL}/tracking/numbers/${id}`),
+  updateTrackingStatus: (id: number, status: 'not_scanned' | 'scanned' | 'delivered') =>
+    axios.patch<TrackingNumber>(`${API_URL}/tracking/numbers/${id}/status`, { status }),
 
   // Analytics
   getBoxAnalytics: () => axios.get(`${API_URL}/analytics/boxes`),

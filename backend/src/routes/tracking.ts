@@ -194,5 +194,35 @@ router.post('/refresh', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// Manual status update endpoint - update a single tracking number's status
+router.patch(
+  '/numbers/:id/status',
+  [body('status').isIn(['not_scanned', 'scanned', 'delivered'])],
+  async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+      
+      const tracking = await getTrackingNumberById(Number(id));
+      if (!tracking) {
+        return res.status(404).json({ error: 'Tracking number not found' });
+      }
+
+      await updateTrackingStatus(Number(id), status);
+      const updated = await getTrackingNumberById(Number(id));
+      
+      res.json(updated);
+    } catch (error) {
+      console.error('Error updating tracking status:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
+
 export default router;
 
