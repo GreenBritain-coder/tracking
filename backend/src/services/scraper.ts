@@ -155,75 +155,36 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
           const jsSnippet = `
             (async function() {
               // Wait for page to load
-              await new Promise(resolve => setTimeout(resolve, 2000));
+              await new Promise(resolve => setTimeout(resolve, 1500));
               
-              // Find and click cookie modal accept button
-              // Try multiple selectors for the modal
+              // Find and click cookie modal accept button - simplified approach
               let modalAccepted = false;
               
-              // Method 1: Look for modal/dialog elements
-              const modals = document.querySelectorAll('[role="dialog"], .modal, [class*="modal"], [id*="modal"], [class*="cookie"], [id*="cookie"], [class*="consent"], [id*="consent"]');
-              for (const modal of modals) {
-                // Look for accept button inside modal
-                const buttons = modal.querySelectorAll('button, a, [role="button"]');
-                for (const btn of buttons) {
-                  const text = (btn.textContent || btn.innerText || '').toLowerCase().trim();
-                  if (text.includes('accept') || text.includes('continue') || text === 'ok' || text === 'yes') {
+              // Quick method: Look for buttons with accept/continue text
+              const buttons = Array.from(document.querySelectorAll('button, a, [role="button"]'));
+              for (const btn of buttons) {
+                const text = (btn.textContent || btn.innerText || '').toLowerCase().trim();
+                if ((text.includes('accept') || text.includes('continue') || text === 'ok') && 
+                    text.length < 30) {
+                  try {
                     btn.click();
                     modalAccepted = true;
-                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    await new Promise(resolve => setTimeout(resolve, 1500));
                     break;
-                  }
-                }
-                if (modalAccepted) break;
-              }
-              
-              // Method 2: Look for overlay/backdrop with buttons
-              if (!modalAccepted) {
-                const overlays = document.querySelectorAll('[class*="overlay"], [class*="backdrop"], [class*="popup"]');
-                for (const overlay of overlays) {
-                  const buttons = overlay.querySelectorAll('button, a');
-                  for (const btn of buttons) {
-                    const text = (btn.textContent || btn.innerText || '').toLowerCase().trim();
-                    if (text.includes('accept') || text.includes('continue') || text === 'ok') {
-                      btn.click();
-                      modalAccepted = true;
-                      await new Promise(resolve => setTimeout(resolve, 2000));
-                      break;
-                    }
-                  }
-                  if (modalAccepted) break;
-                }
-              }
-              
-              // Method 3: Look for any visible button with accept/continue text
-              if (!modalAccepted) {
-                const allButtons = Array.from(document.querySelectorAll('button, a, [role="button"]'));
-                for (const btn of allButtons) {
-                  const text = (btn.textContent || btn.innerText || '').toLowerCase().trim();
-                  const style = window.getComputedStyle(btn);
-                  // Check if button is visible and has accept text
-                  if ((text.includes('accept') || text.includes('continue')) && 
-                      style.display !== 'none' && style.visibility !== 'hidden' &&
-                      style.opacity !== '0') {
-                    btn.click();
-                    modalAccepted = true;
-                    await new Promise(resolve => setTimeout(resolve, 2000));
-                    break;
-                  }
+                  } catch(e) {}
                 }
               }
               
               // For hash-based URLs, ensure hash is set
               if (${isHashBased ? 'true' : 'false'}) {
                 window.location.hash = '#/tracking-results/${cleanTrackingNumber}';
-                await new Promise(resolve => setTimeout(resolve, 3000));
+                await new Promise(resolve => setTimeout(resolve, 2000));
               }
               
-              // Wait for tracking content to load
+              // Wait for tracking content to load - shorter polling
               const trackingNumber = '${cleanTrackingNumber}';
               let attempts = 0;
-              const maxAttempts = 30; // 15 seconds max (30 * 500ms)
+              const maxAttempts = 20; // 10 seconds max (20 * 500ms) - reduced from 30
               
               while (attempts < maxAttempts) {
                 const text = (document.body.innerText || document.body.textContent || '').toLowerCase();
@@ -232,10 +193,8 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
                                           text.includes('delivered') ||
                                           text.includes("we've got it") ||
                                           text.includes('expect to deliver') ||
-                                          text.includes('on its way') ||
                                           text.includes(trackingNumber.toLowerCase());
                 
-                // Make sure it's not just the search form
                 const isSearchForm = text.includes('your reference number') && 
                                    !text.includes('tracking number') &&
                                    !text.includes('service used');
@@ -258,14 +217,14 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
               url: encodedUrl, // Direct URL with properly encoded query parameter
               render_js: 'true', // Enable JavaScript rendering for dynamic content
               js_snippet: Buffer.from(jsSnippet).toString('base64'), // Accept modal and wait for content
-              wait: '20000', // 20 second wait (2s initial + 2s modal + 3s hash + 15s content)
+              wait: '15000', // 15 second wait (1.5s initial + 1.5s modal + 2s hash + 10s content)
               premium_proxy: 'true', // Use premium proxies for better success rate
               block_resources: 'false', // Don't block any resources
               window_width: '1920',
               window_height: '1080',
               country_code: 'GB', // UK geolocation
             },
-            timeout: 40000, // 40 second timeout
+            timeout: 50000, // 50 second timeout (increased from 40s)
           });
           
           html = response.data;
