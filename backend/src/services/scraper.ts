@@ -135,11 +135,13 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
       const cookieResponse = await axios.get('https://api.scrapingant.com/v2/general', {
         params: {
           url: mainPageUrl,
-          'x-api-key': SCRAPINGANT_API_KEY,
           browser: 'true',
           js_code: cookieAcceptJs,
           wait: '10000', // 10 seconds: 2s initial + 2s cookie click + 6s for cookies to be set
           proxy_country: 'GB',
+        },
+        headers: {
+          'x-api-key': SCRAPINGANT_API_KEY, // API key in header, not query parameter
         },
         timeout: 25000,
       });
@@ -212,7 +214,7 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
           }
           
           // ScrapingAnt API: https://api.scrapingant.com/v2/general
-          // Uses x-api-key as query parameter
+          // Uses x-api-key in headers (not query parameter)
           // browser=true enables JavaScript rendering
           // js_code parameter executes JavaScript (plain text, not base64)
           const isHashBased = trackingUrl.includes('#/tracking-results/');
@@ -278,10 +280,9 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
             })();
           `.trim();
           
-          // Build params object
+          // Build params object (API key goes in headers, not params)
           const params: any = {
             url: encodedUrl,
-            'x-api-key': SCRAPINGANT_API_KEY,
             browser: 'true',
             wait: '20000', // 20 seconds for content to load
             proxy_country: 'GB',
@@ -299,6 +300,9 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
           
           const response = await axios.get('https://api.scrapingant.com/v2/general', {
             params,
+            headers: {
+              'x-api-key': SCRAPINGANT_API_KEY, // API key in header, not query parameter
+            },
             timeout: 35000, // Reduced to 35s to fail faster and avoid concurrency issues
           });
           
