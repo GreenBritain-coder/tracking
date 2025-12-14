@@ -3,17 +3,103 @@ import { TrackingStatus } from '../models/tracking';
 
 const SCRAPINGBEE_API_KEY = process.env.SCRAPINGBEE_API_KEY || '';
 
+/**
+ * Parse JSON API response from Royal Mail's microsummary endpoint
+ */
+function parseJsonApiResponse(data: any, trackingNumber: string): {
+  status: TrackingStatus;
+  details?: string;
+  statusHeader?: string;
+} {
+  try {
+    // Extract status from the JSON response
+    // The API structure may vary, so we'll check common fields
+    const statusText = data?.status || data?.summary?.status || data?.mailPieces?.[0]?.status || '';
+    const statusLower = statusText.toLowerCase();
+    
+    // Extract status header/description
+    const statusHeader = data?.summary?.description || 
+                        data?.mailPieces?.[0]?.summary || 
+                        data?.statusDescription || 
+                        statusText;
+    
+    // Extract details
+    const details = JSON.stringify(data).substring(0, 500);
+    
+    // Map API status to our TrackingStatus enum
+    if (statusLower.includes('delivered') || statusLower.includes('delivery completed')) {
+      console.log(`[${trackingNumber}] JSON API: Detected DELIVERED status`);
+      return {
+        status: 'delivered',
+        details,
+        statusHeader: statusHeader || 'Delivered',
+      };
+    } else if (statusLower.includes('in transit') || 
+               statusLower.includes('on its way') ||
+               statusLower.includes('collected') ||
+               statusLower.includes('accepted') ||
+               statusLower.includes('processed') ||
+               statusLower.includes('scanned') ||
+               statusLower.includes('we\'ve got it')) {
+      console.log(`[${trackingNumber}] JSON API: Detected SCANNED status`);
+      return {
+        status: 'scanned',
+        details,
+        statusHeader: statusHeader || 'In Transit',
+      };
+    } else {
+      console.log(`[${trackingNumber}] JSON API: Defaulting to NOT_SCANNED (status: ${statusText})`);
+      return {
+        status: 'not_scanned',
+        details,
+        statusHeader: statusHeader || 'Not Scanned',
+      };
+    }
+  } catch (error) {
+    console.error(`[${trackingNumber}] Error parsing JSON API response:`, error);
+    return {
+      status: 'not_scanned',
+      details: 'Error parsing JSON API response',
+    };
+  }
+}
+
 export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
   status: TrackingStatus;
   details?: string;
   statusHeader?: string;
 }> {
   try {
+    // First, try the JSON API endpoint (much more reliable than scraping HTML)
+    console.log(`[${trackingNumber}] Trying JSON API endpoint...`);
+    try {
+      const apiUrl = `https://api-web.royalmail.com/mailpieces/microsummary/v1/summary/${trackingNumber}`;
+      const apiResponse = await axios.get(apiUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'application/json',
+          'Accept-Language': 'en-GB,en;q=0.9',
+          'Referer': 'https://www.royalmail.com/track-your-item',
+          'Origin': 'https://www.royalmail.com',
+        },
+        timeout: 15000,
+      });
+
+      if (apiResponse.data) {
+        console.log(`[${trackingNumber}] Successfully fetched from JSON API`);
+        return parseJsonApiResponse(apiResponse.data, trackingNumber);
+      }
+    } catch (apiError) {
+      console.log(`[${trackingNumber}] JSON API failed, falling back to ScrapingBee:`, 
+        axios.isAxiosError(apiError) ? apiError.message : 'Unknown error');
+    }
+
+    // Fall back to ScrapingBee if JSON API fails
     if (!SCRAPINGBEE_API_KEY) {
       console.error('ScrapingBee API key not configured');
       return { 
         status: 'not_scanned', 
-        details: 'ScrapingBee API key not configured' 
+        details: 'Both JSON API and ScrapingBee failed' 
       };
     }
 
@@ -39,16 +125,32 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
       const waitTime = 18000 + (attempt * 2000); // 18s, 20s, 22s, 24s, 26s
       
       try {
+        // CSS selectors that appear when tracking results are loaded
+        // Based on inspection: article element contains results
+        // ScrapingBee wait_for supports CSS selectors (not :contains pseudo-selector)
+        const waitForSelectors = 'article, [role="article"]';
+        
         const response = await axios.get('https://app.scrapingbee.com/api/v1/', {
           params: {
             api_key: SCRAPINGBEE_API_KEY,
             url: trackingUrl,
             render_js: 'true', // Enable JavaScript rendering
-            wait: waitTime.toString(), // Varying wait time
+            wait_for: waitForSelectors, // Wait for tracking results to appear
+            wait: '5000', // Fixed 5s wait as backup
             premium_proxy: 'true', // Use premium proxies for better success rate
             block_resources: 'false', // Don't block any resources
             window_width: '1920',
             window_height: '1080',
+            country_code: 'GB', // UK geolocation
+            custom_headers: 'true',
+          },
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-GB,en;q=0.9',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Referer': 'https://www.royalmail.com/',
+            'Origin': 'https://www.royalmail.com',
           },
           timeout: 45000, // 45 second timeout (increased for longer wait times)
         });
