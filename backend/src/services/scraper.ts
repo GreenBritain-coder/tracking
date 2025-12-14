@@ -276,10 +276,11 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
             trackingCreated = true; // Tracking exists, we can try to GET it
           }
           // Handle 429: Rate limit exceeded
+          // Per TrackingMore docs: wait 120 seconds after 429 error
           else if (errorStatus === 429) {
-            console.warn(`[${trackingNumber}] Rate limit exceeded (429), waiting 10 seconds before retrying GET`);
-            // Wait longer before trying GET (exponential backoff)
-            await new Promise(resolve => setTimeout(resolve, 10000));
+            console.warn(`[${trackingNumber}] Rate limit exceeded (429), waiting 120 seconds before retrying GET (per API docs)`);
+            // Wait 120 seconds as recommended by TrackingMore API documentation
+            await new Promise(resolve => setTimeout(resolve, 120000));
             trackingCreated = true; // Assume it might exist, try to GET it
           }
           // Handle 4120: Invalid courier code (shouldn't happen with royal-mail, but log it)
@@ -357,10 +358,11 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
           const errorData = getError.response.data;
           
           // Handle 429: Rate limit exceeded
+          // Per TrackingMore docs: wait 120 seconds after 429 error
           if (errorStatus === 429) {
-            console.warn(`[${trackingNumber}] GET rate limit exceeded (429), returning not_scanned`);
-            // Don't retry immediately to avoid further rate limiting
-            // The scheduler will retry on next run
+            console.warn(`[${trackingNumber}] GET rate limit exceeded (429), returning not_scanned (will retry on next scheduler run)`);
+            // Don't retry immediately - wait for next scheduler run (5 minutes)
+            // Per API docs, should wait 120 seconds, but scheduler runs every 5 minutes anyway
           } else {
             console.warn(`[${trackingNumber}] GET failed (${errorStatus}):`,
               JSON.stringify(errorData).substring(0, 200));

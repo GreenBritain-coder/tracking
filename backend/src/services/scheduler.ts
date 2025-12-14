@@ -59,9 +59,10 @@ export async function updateAllTrackingStatuses() {
         console.error(`Error updating ${tn.tracking_number}:`, error);
         
         // If rate limited, wait longer before continuing
+        // Per TrackingMore docs: wait 120 seconds after 429 error
         if (error instanceof Error && error.message.includes('429')) {
-          console.log('Rate limit detected, waiting 10 seconds before continuing...');
-          await new Promise((resolve) => setTimeout(resolve, 10000));
+          console.log('Rate limit detected (429), waiting 120 seconds before continuing (per API docs)...');
+          await new Promise((resolve) => setTimeout(resolve, 120000));
         }
       }
     }
