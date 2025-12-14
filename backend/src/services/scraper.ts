@@ -261,11 +261,22 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
           );
           console.log(`[${trackingNumber}] Tracking created/updated in TrackingMore with courier code: ${code}`);
           
-          // Check if POST response contains tracking data
+          // Check if POST response contains actual tracking data (not just empty array)
           if (createResponse.data?.data) {
-            console.log(`[${trackingNumber}] POST response contains tracking data, using it directly`);
-            console.log(`[${trackingNumber}] Response structure:`, JSON.stringify(createResponse.data, null, 2).substring(0, 1000));
-            return parseTrackingMoreResponse(createResponse.data, trackingNumber);
+            if (Array.isArray(createResponse.data.data) && createResponse.data.data.length > 0) {
+              // Array with items - has tracking data
+              console.log(`[${trackingNumber}] POST response contains tracking data array, using it directly`);
+              console.log(`[${trackingNumber}] Response structure:`, JSON.stringify(createResponse.data, null, 2).substring(0, 1000));
+              return parseTrackingMoreResponse(createResponse.data, trackingNumber);
+            } else if (!Array.isArray(createResponse.data.data) && Object.keys(createResponse.data.data).length > 0) {
+              // Object with properties - has tracking data
+              console.log(`[${trackingNumber}] POST response contains tracking data object, using it directly`);
+              console.log(`[${trackingNumber}] Response structure:`, JSON.stringify(createResponse.data, null, 2).substring(0, 1000));
+              return parseTrackingMoreResponse(createResponse.data, trackingNumber);
+            } else {
+              // Empty array or empty object - need to GET the data
+              console.log(`[${trackingNumber}] POST response is empty, will fetch tracking data via GET`);
+            }
           }
           
           courierCode = code;
@@ -297,44 +308,50 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
       }
       
       // Step 2: Get tracking information
-      // Wait a moment for TrackingMore to process the tracking
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Wait a moment for TrackingMore to process the tracking (increased wait time)
+      await new Promise(resolve => setTimeout(resolve, 3000));
       
       console.log(`[${trackingNumber}] Getting tracking information from TrackingMore...`);
       // Try different GET endpoint formats
       let getResponse;
       const getFormats = [
-        // Format 1: Query params with snake_case
+        // Format 1: Query params with just tracking_number (most common)
         {
           url: `${TRACKINGMORE_API_BASE}/trackings/get`,
           params: { tracking_number: cleanTrackingNumber },
         },
-        // Format 2: Query params with camelCase
+        // Format 2: Query params with tracking_number and courier_code
         {
           url: `${TRACKINGMORE_API_BASE}/trackings/get`,
-          params: { trackingNumber: cleanTrackingNumber },
+          params: { 
+            tracking_number: cleanTrackingNumber,
+            courier_code: courierCode 
+          },
         },
-        // Format 3: Path parameter
+        // Format 3: Path parameter format
         {
           url: `${TRACKINGMORE_API_BASE}/trackings/${cleanTrackingNumber}`,
           params: {},
         },
-        // Format 4: Query params with courier_code (snake_case)
+        // Format 4: Try camelCase field names
         {
           url: `${TRACKINGMORE_API_BASE}/trackings/get`,
-          params: { tracking_number: cleanTrackingNumber, courier_code: courierCode },
+          params: { trackingNumber: cleanTrackingNumber },
         },
-        // Format 5: Query params with courierCode (camelCase)
+        // Format 5: Try camelCase with courierCode
         {
           url: `${TRACKINGMORE_API_BASE}/trackings/get`,
-          params: { trackingNumber: cleanTrackingNumber, courierCode: courierCode },
+          params: { 
+            trackingNumber: cleanTrackingNumber,
+            courierCode: courierCode 
+          },
         },
       ];
       
       let lastError;
       for (const format of getFormats) {
         try {
-          console.log(`[${trackingNumber}] Trying GET format: ${format.url} with params:`, format.params);
+          console.log(`[${trackingNumber}] Trying GET format: ${format.url} with params:`, JSON.stringify(format.params));
           getResponse = await axios.get(format.url, {
             params: format.params,
             headers: {
@@ -342,14 +359,23 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
             },
             timeout: 30000,
           });
-          console.log(`[${trackingNumber}] GET successful with format: ${format.url}`);
-          break;
+          
+          // Check if response has actual tracking data
+          if (getResponse.data?.data && 
+              ((Array.isArray(getResponse.data.data) && getResponse.data.data.length > 0) ||
+               (!Array.isArray(getResponse.data.data) && Object.keys(getResponse.data.data).length > 0))) {
+            console.log(`[${trackingNumber}] GET successful with format: ${format.url}`);
+            break;
+          } else {
+            console.warn(`[${trackingNumber}] GET returned empty data, trying next format...`);
+            continue;
+          }
         } catch (getError) {
           lastError = getError;
           if (axios.isAxiosError(getError) && getError.response) {
             const status = getError.response.status;
             const errorData = getError.response.data;
-            console.warn(`[${trackingNumber}] GET failed (${status}):`, JSON.stringify(errorData));
+            console.warn(`[${trackingNumber}] GET failed (${status}):`, JSON.stringify(errorData).substring(0, 200));
             // If it's a 404 or 4130, try next format
             if (status === 404 || (errorData?.meta?.code === 4130)) {
               continue;
