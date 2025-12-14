@@ -108,6 +108,58 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
     // Clean tracking number (remove spaces) for URL
     const cleanTrackingNumber = trackingNumber.replace(/\s+/g, '');
     
+    // Step 1: Get cookies from main page first (cookie chaining approach)
+    // This is more reliable than trying to click the cookie modal on each request
+    let cookies = '';
+    try {
+      console.log(`[${trackingNumber}] Step 1: Getting cookies from main page...`);
+      const mainPageUrl = 'https://www.royalmail.com/track-your-item';
+      const cookieAcceptJs = `
+        (async function() {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          const buttons = Array.from(document.querySelectorAll('button, a, [role="button"]'));
+          for (const btn of buttons) {
+            const text = (btn.textContent || btn.innerText || '').toLowerCase().trim();
+            if ((text.includes('accept') || text.includes('continue') || text === 'ok') && 
+                text.length < 30 && btn.offsetParent !== null) {
+              try {
+                btn.click();
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                break;
+              } catch(e) {}
+            }
+          }
+        })();
+      `.trim();
+      
+      const cookieResponse = await axios.get('https://api.scrapingant.com/v2/general', {
+        params: {
+          url: mainPageUrl,
+          'x-api-key': SCRAPINGANT_API_KEY,
+          browser: 'true',
+          js_code: cookieAcceptJs,
+          wait: '10000', // 10 seconds: 2s initial + 2s cookie click + 6s for cookies to be set
+          proxy_country: 'GB',
+        },
+        timeout: 25000,
+      });
+      
+      // Extract cookies from response (ScrapingAnt returns cookies as a string)
+      cookies = cookieResponse.data?.cookies || '';
+      if (cookies) {
+        console.log(`[${trackingNumber}] ✅ Successfully obtained cookies (length: ${cookies.length} chars)`);
+      } else {
+        console.warn(`[${trackingNumber}] ⚠️ No cookies returned from main page, continuing without cookies`);
+      }
+      
+      // Wait a bit after getting cookies to avoid concurrency limit
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    } catch (cookieError) {
+      console.warn(`[${trackingNumber}] ⚠️ Failed to get cookies from main page:`, 
+        axios.isAxiosError(cookieError) ? cookieError.message : 'Unknown error');
+      // Continue without cookies - will try with js_code instead
+    }
+    
     // Try multiple URL formats - Hash-based works (user confirmed modal appears then shows tracking)
     // Prioritize hash-based format since it works when modal is accepted
     const urlFormats = [
@@ -231,10 +283,19 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
             url: encodedUrl,
             'x-api-key': SCRAPINGANT_API_KEY,
             browser: 'true',
-            wait: '25000', // 25 seconds: 2s initial + 2s cookie click + 3s hash nav + 18s content load
+            wait: '20000', // 20 seconds for content to load
             proxy_country: 'GB',
-            js_code: jsCode, // ScrapingAnt supports js_code parameter (plain JavaScript)
           };
+          
+          // Use cookies if we have them (more reliable than JavaScript clicking)
+          if (cookies) {
+            params.cookies = cookies;
+            console.log(`[${trackingNumber}] Using cookies from initial request`);
+          } else {
+            // Fallback: use JavaScript to accept cookies if we don't have them
+            params.js_code = jsCode;
+            console.log(`[${trackingNumber}] Using JavaScript to accept cookies (no cookies available)`);
+          }
           
           const response = await axios.get('https://api.scrapingant.com/v2/general', {
             params,
