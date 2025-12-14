@@ -409,6 +409,9 @@ export default function Dashboard() {
                               // Use setTimeout to ensure React state update happens after browser validation
                               setTimeout(() => {
                                 setCustomTimestamp(parsedDate);
+                                // Auto-save after paste
+                                const dateTimestamp = new Date(parsedDate + 'T00:00:00Z').toISOString();
+                                handleStatusChange(tn.id, tn.current_status, tn.postbox_id, dateTimestamp);
                               }, 0);
                             } else {
                               console.warn('Could not parse pasted date:', pastedText);
@@ -435,19 +438,6 @@ export default function Dashboard() {
                           }}
                           autoFocus
                         />
-                        <button onClick={() => {
-                          if (customTimestamp) {
-                            // Convert date to ISO timestamp (midnight UTC)
-                            const dateTimestamp = customTimestamp ? new Date(customTimestamp + 'T00:00:00Z').toISOString() : null;
-                            handleStatusChange(tn.id, tn.current_status, tn.postbox_id, dateTimestamp);
-                          } else {
-                            setEditingTrackingId(null);
-                          }
-                        }}>✓</button>
-                        <button onClick={() => {
-                          setEditingTrackingId(null);
-                          setCustomTimestamp('');
-                        }}>✕</button>
                       </div>
                     ) : (
                       <div className="timestamp-display">
