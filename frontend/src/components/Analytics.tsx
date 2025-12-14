@@ -80,11 +80,14 @@ export default function Analytics() {
     }
   };
 
-  const formatHours = (hours: number | null) => {
-    if (hours === null) return 'N/A';
-    if (hours < 24) return `${hours.toFixed(1)}h`;
-    const days = Math.floor(hours / 24);
-    const remainingHours = hours % 24;
+  const formatHours = (hours: number | null | string) => {
+    if (hours === null || hours === undefined) return 'N/A';
+    // Convert to number if it's a string
+    const numHours = typeof hours === 'string' ? parseFloat(hours) : hours;
+    if (isNaN(numHours)) return 'N/A';
+    if (numHours < 24) return `${numHours.toFixed(1)}h`;
+    const days = Math.floor(numHours / 24);
+    const remainingHours = numHours % 24;
     return `${days}d ${remainingHours.toFixed(1)}h`;
   };
 
