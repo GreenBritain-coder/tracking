@@ -105,147 +105,124 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
 
     console.log(`[${trackingNumber}] Fetching via ScrapingBee...`);
     
-    // Use base URL and navigate via JavaScript (hash routing requires JS execution)
-    const baseUrl = 'https://www.royalmail.com/track-your-item';
+    // Clean tracking number (remove spaces) for URL
+    const cleanTrackingNumber = trackingNumber.replace(/\s+/g, '');
     
-    // Retry up to 5 times if we don't get tracking content
+    // Try multiple URL formats - Royal Mail supports query parameter format
+    const urlFormats = [
+      `http://www.royalmail.com/track-trace?trackNumber=${cleanTrackingNumber}`,
+      `https://www.royalmail.com/track-trace?trackNumber=${cleanTrackingNumber}`,
+      `https://www.royalmail.com/track-your-item?trackNumber=${cleanTrackingNumber}`,
+    ];
+    
+    // Retry up to 2 times to save credits
     let html = '';
     let attempt = 0;
-    const maxAttempts = 5;
+    const maxAttempts = 2;
+    let foundContent = false;
     
-    for (attempt = 1; attempt <= maxAttempts; attempt++) {
+    outerLoop: for (attempt = 1; attempt <= maxAttempts; attempt++) {
       if (attempt > 1) {
         console.log(`[${trackingNumber}] Retry attempt ${attempt}/${maxAttempts}...`);
-        // Wait longer between retries when we get search form (5-8 seconds to look more human-like)
-        const delay = 5000 + Math.floor(Math.random() * 3000);
+        // Shorter delay between retries (3-5 seconds)
+        const delay = 3000 + Math.floor(Math.random() * 2000);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
       
-      try {
-        // Use JavaScript snippet to navigate to tracking results and wait for content
-        // This ensures hash routing executes properly
-        // ScrapingBee requires js_snippet to be base64 encoded
-        const jsSnippet = `
-(async function() {
-  window.location.hash = '#/tracking-results/${trackingNumber}';
-  await new Promise(resolve => {
-    const checkHash = () => {
-      if (window.location.hash.includes('tracking-results')) {
-        resolve();
-      } else {
-        setTimeout(checkHash, 100);
-      }
-    };
-    checkHash();
-  });
-  let attempts = 0;
-  const maxAttempts = 40;
-  while (attempts < maxAttempts) {
-    const text = document.body.innerText || document.body.textContent || '';
-    const hasTrackingContent = text.includes('Tracking number:') || 
-                              text.includes('Service used:') ||
-                              text.includes('Delivered') ||
-                              text.includes("We've got it") ||
-                              text.includes('expect to deliver');
-    if (hasTrackingContent) {
-      return true;
-    }
-    await new Promise(resolve => setTimeout(resolve, 500));
-    attempts++;
-  }
-  return false;
-})();
-        `.trim();
-        
-        // Encode JavaScript snippet to base64 (required by ScrapingBee)
-        const jsSnippetBase64 = Buffer.from(jsSnippet).toString('base64');
-        
-        // Fixed wait time - JS snippet handles the actual waiting
-        const fixedWaitTime = Math.min(15000 + (attempt * 2000), 25000); // 15s-25s, increasing with attempts
-        
-        const response = await axios.get('https://app.scrapingbee.com/api/v1/', {
-          params: {
-            api_key: SCRAPINGBEE_API_KEY,
-            url: baseUrl, // Base URL without hash
-            render_js: 'true', // Enable JavaScript rendering
-            js_snippet: jsSnippetBase64, // Execute JS to navigate and wait for content (base64 encoded)
-            wait: fixedWaitTime.toString(), // Fixed wait time as backup
-            premium_proxy: 'true', // Use premium proxies for better success rate
-            block_resources: 'false', // Don't block any resources
-            window_width: '1920',
-            window_height: '1080',
-            country_code: 'GB', // UK geolocation
-          },
-          timeout: 50000, // 50 second timeout (increased for longer wait times)
-        });
-
-        html = response.data;
-        console.log(`[${trackingNumber}] Received HTML (attempt ${attempt}), length: ${html.length} bytes`);
-        
-        // Quick check: Extract a sample of text to verify it's tracking content, not search form
-        // Remove HTML tags to get plain text sample
-        const textSample = html
-          .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-          .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-          .replace(/<[^>]+>/g, ' ')
-          .replace(/\s+/g, ' ')
-          .toLowerCase()
-          .substring(0, 2000); // First 2000 chars should be enough
-        
-        // Check for actual tracking results (not search form)
-        const hasTrackingResults = (
-          (textSample.includes('tracking number:') && textSample.includes('service used:')) ||
-          textSample.includes('we\'ve got it') || 
-          textSample.includes('expect to deliver') ||
-          (textSample.includes('delivered') && textSample.includes('tracking number:')) ||
-          (textSample.includes('your item was delivered') && textSample.includes('tracking number:'))
-        );
-        
-        // Check that it's NOT the search form (search form has "your reference number*" but no actual tracking data)
-        const isSearchForm = textSample.includes('your reference number*') && 
-                            !textSample.includes('tracking number:') &&
-                            !textSample.includes('we\'ve got it') &&
-                            !textSample.includes('delivered') &&
-                            !textSample.includes('service used:');
-        
-        if (hasTrackingResults && !isSearchForm) {
-          console.log(`[${trackingNumber}] Tracking content detected on attempt ${attempt}`);
-          break; // Got good content, stop retrying
-        } else {
-          if (isSearchForm) {
-            console.log(`[${trackingNumber}] Search form detected on attempt ${attempt} (not tracking results), retrying...`);
-            // If we got search form, wait a bit longer before next retry
-            if (attempt < maxAttempts) {
-              const extraDelay = 3000 + Math.floor(Math.random() * 2000);
-              console.log(`[${trackingNumber}] Waiting additional ${extraDelay}ms before retry (search form detected)...`);
-              await new Promise(resolve => setTimeout(resolve, extraDelay));
+      // Try each URL format
+      for (const trackingUrl of urlFormats) {
+        try {
+          console.log(`[${trackingNumber}] Trying URL: ${trackingUrl}`);
+          
+          // Simple approach - no js_snippet needed, just direct URL with query parameter
+          const response = await axios.get('https://app.scrapingbee.com/api/v1/', {
+            params: {
+              api_key: SCRAPINGBEE_API_KEY,
+              url: trackingUrl, // Direct URL with query parameter
+              render_js: 'true', // Enable JavaScript rendering for dynamic content
+              wait: '10000', // 10 second wait (reduced to save credits)
+              premium_proxy: 'true', // Use premium proxies for better success rate
+              block_resources: 'false', // Don't block any resources
+              window_width: '1920',
+              window_height: '1080',
+              country_code: 'GB', // UK geolocation
+            },
+            timeout: 25000, // Reduced timeout to 25s (saves credits on failures)
+          });
+          
+          html = response.data;
+          console.log(`[${trackingNumber}] Received HTML (attempt ${attempt}), length: ${html.length} bytes`);
+          
+          // Quick check: Extract a sample of text to verify it's tracking content, not search form
+          // Remove HTML tags to get plain text sample
+          const textSample = html
+            .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+            .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+            .replace(/<[^>]+>/g, ' ')
+            .replace(/\s+/g, ' ')
+            .toLowerCase()
+            .substring(0, 2000); // First 2000 chars should be enough
+          
+          // Check for actual tracking results (not search form)
+          const hasTrackingResults = (
+            (textSample.includes('tracking number:') && textSample.includes('service used:')) ||
+            textSample.includes('we\'ve got it') || 
+            textSample.includes('expect to deliver') ||
+            (textSample.includes('delivered') && textSample.includes('tracking number:')) ||
+            (textSample.includes('your item was delivered') && textSample.includes('tracking number:'))
+          );
+          
+          // Check that it's NOT the search form (search form has "your reference number*" but no actual tracking data)
+          const isSearchForm = textSample.includes('your reference number*') && 
+                              !textSample.includes('tracking number:') &&
+                              !textSample.includes('we\'ve got it') &&
+                              !textSample.includes('delivered') &&
+                              !textSample.includes('service used:');
+          
+          if (hasTrackingResults && !isSearchForm) {
+            console.log(`[${trackingNumber}] Tracking content detected on attempt ${attempt} with URL: ${trackingUrl}`);
+            foundContent = true;
+            break outerLoop; // Got good content, stop retrying
+          } else {
+            if (isSearchForm) {
+              console.log(`[${trackingNumber}] Search form detected with URL: ${trackingUrl}, trying next URL format...`);
+            } else {
+              console.log(`[${trackingNumber}] No tracking content detected with URL: ${trackingUrl}, trying next URL format...`);
             }
+            // Continue to next URL format
+          }
+        } catch (requestError) {
+          // Handle 503 Service Unavailable (ScrapingBee infrastructure issue)
+          if (axios.isAxiosError(requestError) && requestError.response?.status === 503) {
+            console.warn(`[${trackingNumber}] ScrapingBee returned 503 (Service Unavailable) with URL: ${trackingUrl}`);
+            // Try next URL format on 503
+            continue;
+          } else if (axios.isAxiosError(requestError) && requestError.code === 'ECONNABORTED') {
+            console.warn(`[${trackingNumber}] Request timed out with URL: ${trackingUrl}, trying next URL format...`);
+            // Try next URL format on timeout
+            continue;
           } else {
-            console.log(`[${trackingNumber}] No tracking content detected on attempt ${attempt}, may retry...`);
+            // Other errors - log and try next URL format
+            console.warn(`[${trackingNumber}] Error with URL ${trackingUrl}:`, 
+              axios.isAxiosError(requestError) ? requestError.message : 'Unknown error');
+            continue;
           }
-          if (attempt === maxAttempts) {
-            console.warn(`[${trackingNumber}] Failed to get tracking content after ${maxAttempts} attempts`);
-          }
-        }
-      } catch (requestError) {
-        // Handle 503 Service Unavailable (ScrapingBee infrastructure issue)
-        if (axios.isAxiosError(requestError) && requestError.response?.status === 503) {
-          console.warn(`[${trackingNumber}] ScrapingBee returned 503 (Service Unavailable) on attempt ${attempt}`);
-          if (attempt < maxAttempts) {
-            // Exponential backoff for 503s: 5s, 10s, 20s
-            const backoffDelay = 5000 * Math.pow(2, attempt - 1);
-            console.log(`[${trackingNumber}] Waiting ${backoffDelay}ms before retry (exponential backoff for 503)...`);
-            await new Promise(resolve => setTimeout(resolve, backoffDelay));
-            continue; // Retry the request
-          } else {
-            console.error(`[${trackingNumber}] ScrapingBee 503 error persisted after ${maxAttempts} attempts`);
-            throw requestError; // Re-throw to be caught by outer catch
-          }
-        } else {
-          // Other errors - re-throw to be caught by outer catch
-          throw requestError;
         }
       }
+      
+      // If we've tried all URL formats and still no content, break to retry attempt
+      if (!foundContent && attempt === maxAttempts) {
+        console.warn(`[${trackingNumber}] Failed to get tracking content after ${maxAttempts} attempts with all URL formats`);
+      }
+    }
+    
+    // If we didn't get any content, return early
+    if (!foundContent || !html) {
+      console.warn(`[${trackingNumber}] No tracking content found after all attempts`);
+      return {
+        status: 'not_scanned',
+        details: 'Unable to fetch tracking information from Royal Mail',
+      };
     }
 
     // Try to extract just the main tracking content (skip header, footer, cookie banners)
