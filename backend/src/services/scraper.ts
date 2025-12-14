@@ -217,7 +217,7 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
           };
           
           await axios.post(
-            `${TRACKINGMORE_API_BASE}/trackings/post`,
+            `${TRACKINGMORE_API_BASE}/trackings`,
             requestBody,
             {
               headers: {
@@ -259,12 +259,8 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
       // Step 2: Get tracking information
       console.log(`[${trackingNumber}] Getting tracking information from TrackingMore with courier code: ${courierCode}...`);
       const getResponse = await axios.get(
-        `${TRACKINGMORE_API_BASE}/trackings/get`,
+        `${TRACKINGMORE_API_BASE}/trackings/${courierCode}/${cleanTrackingNumber}`,
         {
-          params: {
-            tracking_number: cleanTrackingNumber,
-            courier_code: courierCode,
-          },
           headers: {
             'Tracking-Api-Key': TRACKINGMORE_API_KEY,
           },
