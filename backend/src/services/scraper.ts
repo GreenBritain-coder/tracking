@@ -152,13 +152,42 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
           // ScrapingAnt API: https://api.scrapingant.com/v2/general
           // Uses x-api-key as query parameter
           // browser=true enables JavaScript rendering
-          // wait_for_selector can wait for specific content (check docs)
+          // Add JavaScript to accept cookie modal
+          const isHashBased = trackingUrl.includes('#/tracking-results/');
+          const jsCode = `
+            (async function() {
+              // Wait for page to load
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              
+              // Find and click cookie modal accept button
+              const buttons = Array.from(document.querySelectorAll('button, a, [role="button"]'));
+              for (const btn of buttons) {
+                const text = (btn.textContent || btn.innerText || '').toLowerCase().trim();
+                if ((text.includes('accept') || text.includes('continue') || text === 'ok') && 
+                    text.length < 30) {
+                  try {
+                    btn.click();
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    break;
+                  } catch(e) {}
+                }
+              }
+              
+              // For hash-based URLs, ensure hash is set
+              if (${isHashBased ? 'true' : 'false'}) {
+                window.location.hash = '#/tracking-results/${cleanTrackingNumber}';
+                await new Promise(resolve => setTimeout(resolve, 3000));
+              }
+            })();
+          `.trim();
+          
           const response = await axios.get('https://api.scrapingant.com/v2/general', {
             params: {
               url: encodedUrl, // Direct URL with properly encoded query parameter
               'x-api-key': SCRAPINGANT_API_KEY, // API key as query parameter
               browser: 'true', // Enable browser rendering (JavaScript)
-              wait: '20000', // Wait 20 seconds for page to load (including modal acceptance)
+              js_code: jsCode, // Execute JavaScript to accept cookie modal
+              wait: '25000', // Wait 25 seconds (2s initial + 2s modal + 3s hash + 18s content)
               proxy_country: 'GB', // UK geolocation
             },
             timeout: 50000, // 50 second timeout
