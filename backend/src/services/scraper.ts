@@ -118,6 +118,7 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
     ];
     
     // Retry up to 2 times to save credits
+    // Process URLs sequentially to avoid ScrapingAnt free plan concurrency limit (1 request at a time)
     let html = '';
     let attempt = 0;
     const maxAttempts = 2;
@@ -126,13 +127,22 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
     outerLoop: for (attempt = 1; attempt <= maxAttempts; attempt++) {
       if (attempt > 1) {
         console.log(`[${trackingNumber}] Retry attempt ${attempt}/${maxAttempts}...`);
-        // Shorter delay between retries (3-5 seconds)
-        const delay = 3000 + Math.floor(Math.random() * 2000);
+        // Longer delay between retries to avoid concurrency limit (10-15 seconds)
+        const delay = 10000 + Math.floor(Math.random() * 5000);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
       
-      // Try each URL format
-      for (const trackingUrl of urlFormats) {
+      // Try each URL format sequentially (not in parallel) to avoid concurrency limit
+      for (let urlIndex = 0; urlIndex < urlFormats.length; urlIndex++) {
+        const trackingUrl = urlFormats[urlIndex];
+        
+        // Add delay between URL attempts to avoid hitting concurrency limit (free plan = 1 concurrent request)
+        if (urlIndex > 0) {
+          console.log(`[${trackingNumber}] Waiting 5 seconds before trying next URL (to avoid concurrency limit)...`);
+          await new Promise(resolve => setTimeout(resolve, 5000));
+        }
+        
+        if (foundContent) break; // Skip if we already found content
         try {
           console.log(`[${trackingNumber}] Trying URL: ${trackingUrl}`);
           
@@ -181,16 +191,23 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
             })();
           `.trim();
           
+          // Build params object - try js_code if ScrapingAnt supports it
+          const params: any = {
+            url: encodedUrl,
+            'x-api-key': SCRAPINGANT_API_KEY,
+            browser: 'true',
+            wait: '20000', // Reduced to 20s to prevent timeouts (free plan is slower)
+            proxy_country: 'GB',
+          };
+          
+          // Try adding js_code if ScrapingAnt supports it (may not be available on free plan)
+          if (jsCode) {
+            params.js_code = jsCode;
+          }
+          
           const response = await axios.get('https://api.scrapingant.com/v2/general', {
-            params: {
-              url: encodedUrl, // Direct URL with properly encoded query parameter
-              'x-api-key': SCRAPINGANT_API_KEY, // API key as query parameter
-              browser: 'true', // Enable browser rendering (JavaScript)
-              js_code: jsCode, // Execute JavaScript to accept cookie modal
-              wait: '25000', // Wait 25 seconds (2s initial + 2s modal + 3s hash + 18s content)
-              proxy_country: 'GB', // UK geolocation
-            },
-            timeout: 50000, // 50 second timeout
+            params,
+            timeout: 35000, // Reduced to 35s to fail faster and avoid concurrency issues
           });
           
           // ScrapingAnt returns JSON with 'content' field containing HTML
@@ -265,15 +282,26 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
               // 401 Unauthorized - Royal Mail is blocking ScrapingAnt
               console.warn(`[${trackingNumber}] ⚠️ ScrapingAnt returned 401 (Unauthorized) with URL: ${trackingUrl}`);
               console.warn(`[${trackingNumber}] This likely means Royal Mail is blocking ScrapingAnt's requests`);
-              // Try next URL format - maybe a different URL will work
+              // Wait before trying next URL to avoid concurrency limit
+              await new Promise(resolve => setTimeout(resolve, 5000));
               continue;
             } else if (status === 403) {
               // 403 Forbidden - Similar to 401, blocked access
               console.warn(`[${trackingNumber}] ⚠️ ScrapingAnt returned 403 (Forbidden) with URL: ${trackingUrl}`);
+              await new Promise(resolve => setTimeout(resolve, 5000));
               continue;
+            } else if (status === 409) {
+              // 409 Conflict - Free plan concurrency limit reached (only 1 request at a time)
+              console.warn(`[${trackingNumber}] ⚠️ ScrapingAnt returned 409 (Concurrency limit) with URL: ${trackingUrl}`);
+              console.warn(`[${trackingNumber}] Free plan allows only 1 concurrent request. Waiting 20 seconds before next attempt...`);
+              // Wait longer before retrying to avoid concurrency limit
+              await new Promise(resolve => setTimeout(resolve, 20000));
+              // Break out of URL loop and retry the whole attempt
+              break;
             } else if (status === 503) {
               // 503 Service Unavailable (ScrapingAnt infrastructure issue)
               console.warn(`[${trackingNumber}] ⚠️ ScrapingAnt returned 503 (Service Unavailable) with URL: ${trackingUrl}`);
+              await new Promise(resolve => setTimeout(resolve, 5000));
               // Try next URL format on 503
               continue;
             } else if (requestError.code === 'ECONNABORTED') {
