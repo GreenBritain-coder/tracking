@@ -198,7 +198,8 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
         };
         
         // Add delay to avoid rate limiting (429 errors)
-        await new Promise(resolve => setTimeout(resolve, 200));
+        // 500ms delay = max 2 requests/second, well under API limit of 10/sec
+        await new Promise(resolve => setTimeout(resolve, 500));
         
         // Use the correct endpoint: /trackings/create
         const createResponse = await axios.post(
@@ -276,9 +277,9 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
           }
           // Handle 429: Rate limit exceeded
           else if (errorStatus === 429) {
-            console.warn(`[${trackingNumber}] Rate limit exceeded (429), will try to fetch existing tracking after delay`);
-            // Wait longer before trying GET
-            await new Promise(resolve => setTimeout(resolve, 5000));
+            console.warn(`[${trackingNumber}] Rate limit exceeded (429), waiting 10 seconds before retrying GET`);
+            // Wait longer before trying GET (exponential backoff)
+            await new Promise(resolve => setTimeout(resolve, 10000));
             trackingCreated = true; // Assume it might exist, try to GET it
           }
           // Handle 4120: Invalid courier code (shouldn't happen with royal-mail, but log it)
@@ -310,8 +311,8 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
       
       // Try to GET the tracking data using the correct endpoint: /trackings/get?tracking_numbers=...
       try {
-        // Add delay before GET to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 200));
+        // Add delay before GET to avoid rate limiting (500ms = max 2 requests/second)
+        await new Promise(resolve => setTimeout(resolve, 500));
         
         console.log(`[${trackingNumber}] Fetching tracking data from TrackingMore using GET API...`);
         const getResponse = await axios.get(
@@ -359,6 +360,7 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
           if (errorStatus === 429) {
             console.warn(`[${trackingNumber}] GET rate limit exceeded (429), returning not_scanned`);
             // Don't retry immediately to avoid further rate limiting
+            // The scheduler will retry on next run
           } else {
             console.warn(`[${trackingNumber}] GET failed (${errorStatus}):`,
               JSON.stringify(errorData).substring(0, 200));

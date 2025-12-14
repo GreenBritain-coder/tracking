@@ -35,39 +35,34 @@ export async function updateAllTrackingStatuses() {
       return;
     }
     
-    // Process in batches to avoid overwhelming the scraper
-    const batchSize = 5;
-    for (let i = 0; i < trackingNumbers.length; i += batchSize) {
-      const batch = trackingNumbers.slice(i, i + batchSize);
-      
-      await Promise.all(
-        batch.map(async (tn) => {
-          try {
-            const result = await checkRoyalMailStatus(tn.tracking_number);
-            
-            // Only update if status changed or statusHeader changed
-            if (result.status !== tn.current_status) {
-              // Store the statusHeader (like "We've got it") in the status_details field
-              await updateTrackingStatus(tn.id, result.status, result.statusHeader);
-              updated++;
-              console.log(
-                `Updated ${tn.tracking_number}: ${tn.current_status} -> ${result.status}`,
-                result.statusHeader ? `Header: ${result.statusHeader}` : ''
-              );
-            }
-            
-            // Add small delay between requests to avoid rate limiting
-            await new Promise((resolve) => setTimeout(resolve, 1000));
-          } catch (error) {
-            errors++;
-            console.error(`Error updating ${tn.tracking_number}:`, error);
-          }
-        })
-      );
-      
-      // Longer delay between batches
-      if (i + batchSize < trackingNumbers.length) {
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+    // Process sequentially to avoid rate limiting (API limit is 10 requests/second)
+    // Add delay before each request to stay well under the limit
+    for (const tn of trackingNumbers) {
+      try {
+        // Delay before each request to avoid rate limiting (500ms = max 2 requests/second, well under 10/sec limit)
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        
+        const result = await checkRoyalMailStatus(tn.tracking_number);
+        
+        // Only update if status changed or statusHeader changed
+        if (result.status !== tn.current_status) {
+          // Store the statusHeader (like "We've got it") in the status_details field
+          await updateTrackingStatus(tn.id, result.status, result.statusHeader);
+          updated++;
+          console.log(
+            `Updated ${tn.tracking_number}: ${tn.current_status} -> ${result.status}`,
+            result.statusHeader ? `Header: ${result.statusHeader}` : ''
+          );
+        }
+      } catch (error) {
+        errors++;
+        console.error(`Error updating ${tn.tracking_number}:`, error);
+        
+        // If rate limited, wait longer before continuing
+        if (error instanceof Error && error.message.includes('429')) {
+          console.log('Rate limit detected, waiting 10 seconds before continuing...');
+          await new Promise((resolve) => setTimeout(resolve, 10000));
+        }
       }
     }
     
