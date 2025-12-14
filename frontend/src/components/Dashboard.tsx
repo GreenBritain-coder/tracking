@@ -373,6 +373,36 @@ export default function Dashboard() {
                           type="date"
                           value={customTimestamp || (tn.custom_timestamp ? new Date(tn.custom_timestamp).toISOString().slice(0, 10) : '')}
                           onChange={(e) => setCustomTimestamp(e.target.value)}
+                          onPaste={(e) => {
+                            e.preventDefault();
+                            const pastedText = e.clipboardData.getData('text').trim();
+                            // Try to parse the pasted text as a date
+                            let parsedDate = '';
+                            
+                            // Try ISO format first (YYYY-MM-DD)
+                            if (/^\d{4}-\d{2}-\d{2}$/.test(pastedText)) {
+                              parsedDate = pastedText;
+                            } 
+                            // Try DD/MM/YYYY or DD-MM-YYYY (UK format)
+                            else if (/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}$/.test(pastedText)) {
+                              const parts = pastedText.split(/[\/\-]/);
+                              const day = parts[0].padStart(2, '0');
+                              const month = parts[1].padStart(2, '0');
+                              const year = parts[2];
+                              parsedDate = `${year}-${month}-${day}`;
+                            }
+                            // Try to parse as Date object (handles various formats)
+                            else {
+                              const date = new Date(pastedText);
+                              if (!isNaN(date.getTime())) {
+                                parsedDate = date.toISOString().slice(0, 10);
+                              }
+                            }
+                            
+                            if (parsedDate) {
+                              setCustomTimestamp(parsedDate);
+                            }
+                          }}
                           onBlur={() => {
                             if (customTimestamp) {
                               // Convert date to ISO timestamp (midnight UTC)
