@@ -188,6 +188,9 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
           const requestBody = {
             tracking_number: cleanTrackingNumber,
             courier_code: code,
+            // Add optional fields that might help with creation
+            order_id: cleanTrackingNumber, // Use tracking number as order ID
+            title: `Royal Mail Tracking ${cleanTrackingNumber}`,
           };
           
           const createResponse = await axios.post(
