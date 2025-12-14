@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { TrackingStatus } from '../models/tracking';
 
-const SCRAPINGBEE_API_KEY = process.env.SCRAPINGBEE_API_KEY || '';
+const SCRAPINGANT_API_KEY = process.env.SCRAPINGANT_API_KEY || '';
 
 /**
  * Parse JSON API response from Royal Mail's microsummary endpoint
@@ -90,20 +90,20 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
         return parseJsonApiResponse(apiResponse.data, trackingNumber);
       }
     } catch (apiError) {
-      console.log(`[${trackingNumber}] JSON API failed, falling back to ScrapingBee:`, 
+      console.log(`[${trackingNumber}] JSON API failed, falling back to ScrapingAnt:`, 
         axios.isAxiosError(apiError) ? apiError.message : 'Unknown error');
     }
 
-    // Fall back to ScrapingBee if JSON API fails
-    if (!SCRAPINGBEE_API_KEY) {
-      console.error('ScrapingBee API key not configured');
+    // Fall back to ScrapingAnt if JSON API fails
+    if (!SCRAPINGANT_API_KEY) {
+      console.error('ScrapingAnt API key not configured');
       return { 
         status: 'not_scanned', 
-        details: 'Both JSON API and ScrapingBee failed' 
+        details: 'Both JSON API and ScrapingAnt failed' 
       };
     }
 
-    console.log(`[${trackingNumber}] Fetching via ScrapingBee...`);
+    console.log(`[${trackingNumber}] Fetching via ScrapingAnt...`);
     
     // Clean tracking number (remove spaces) for URL
     const cleanTrackingNumber = trackingNumber.replace(/\s+/g, '');
@@ -149,85 +149,26 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
             encodedUrl = encodeURI(trackingUrl);
           }
           
-          // Use JavaScript to accept cookie modal and wait for tracking content
-          // Hash-based URL shows a modal that needs to be accepted before tracking loads
-          const isHashBased = trackingUrl.includes('#/tracking-results/');
-          const jsSnippet = `
-            (async function() {
-              // Wait for page to load
-              await new Promise(resolve => setTimeout(resolve, 1500));
-              
-              // Find and click cookie modal accept button - simplified approach
-              let modalAccepted = false;
-              
-              // Quick method: Look for buttons with accept/continue text
-              const buttons = Array.from(document.querySelectorAll('button, a, [role="button"]'));
-              for (const btn of buttons) {
-                const text = (btn.textContent || btn.innerText || '').toLowerCase().trim();
-                if ((text.includes('accept') || text.includes('continue') || text === 'ok') && 
-                    text.length < 30) {
-                  try {
-                    btn.click();
-                    modalAccepted = true;
-                    await new Promise(resolve => setTimeout(resolve, 1500));
-                    break;
-                  } catch(e) {}
-                }
-              }
-              
-              // For hash-based URLs, ensure hash is set
-              if (${isHashBased ? 'true' : 'false'}) {
-                window.location.hash = '#/tracking-results/${cleanTrackingNumber}';
-                await new Promise(resolve => setTimeout(resolve, 2000));
-              }
-              
-              // Wait for tracking content to load - shorter polling
-              const trackingNumber = '${cleanTrackingNumber}';
-              let attempts = 0;
-              const maxAttempts = 20; // 10 seconds max (20 * 500ms) - reduced from 30
-              
-              while (attempts < maxAttempts) {
-                const text = (document.body.innerText || document.body.textContent || '').toLowerCase();
-                const hasTrackingContent = text.includes('tracking number') || 
-                                          text.includes('service used') ||
-                                          text.includes('delivered') ||
-                                          text.includes("we've got it") ||
-                                          text.includes('expect to deliver') ||
-                                          text.includes(trackingNumber.toLowerCase());
-                
-                const isSearchForm = text.includes('your reference number') && 
-                                   !text.includes('tracking number') &&
-                                   !text.includes('service used');
-                
-                if (hasTrackingContent && !isSearchForm) {
-                  return true; // Tracking content loaded
-                }
-                
-                await new Promise(resolve => setTimeout(resolve, 500));
-                attempts++;
-              }
-              
-              return false; // Timeout
-            })();
-          `.trim();
-          
-          const response = await axios.get('https://app.scrapingbee.com/api/v1/', {
+          // ScrapingAnt API: https://api.scrapingant.com/v2/general
+          // Uses x-api-key as query parameter
+          // browser=true enables JavaScript rendering
+          // wait_for_selector can wait for specific content (check docs)
+          const response = await axios.get('https://api.scrapingant.com/v2/general', {
             params: {
-              api_key: SCRAPINGBEE_API_KEY,
               url: encodedUrl, // Direct URL with properly encoded query parameter
-              render_js: 'true', // Enable JavaScript rendering for dynamic content
-              js_snippet: Buffer.from(jsSnippet).toString('base64'), // Accept modal and wait for content
-              wait: '15000', // 15 second wait (1.5s initial + 1.5s modal + 2s hash + 10s content)
-              premium_proxy: 'true', // Use premium proxies for better success rate
-              block_resources: 'false', // Don't block any resources
-              window_width: '1920',
-              window_height: '1080',
-              country_code: 'GB', // UK geolocation
+              'x-api-key': SCRAPINGANT_API_KEY, // API key as query parameter
+              browser: 'true', // Enable browser rendering (JavaScript)
+              wait: '20000', // Wait 20 seconds for page to load (including modal acceptance)
+              proxy_country: 'GB', // UK geolocation
             },
-            timeout: 50000, // 50 second timeout (increased from 40s)
+            timeout: 50000, // 50 second timeout
           });
           
-          html = response.data;
+          // ScrapingAnt returns JSON with 'content' field containing HTML
+          html = response.data?.content || response.data || '';
+          if (typeof html !== 'string') {
+            html = JSON.stringify(html);
+          }
           console.log(`[${trackingNumber}] Received HTML (attempt ${attempt}), length: ${html.length} bytes`);
           
           // Extract text from HTML (remove scripts, styles, tags)
@@ -292,18 +233,18 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
             const statusText = requestError.response?.statusText;
             
             if (status === 401) {
-              // 401 Unauthorized - Royal Mail is blocking ScrapingBee
-              console.warn(`[${trackingNumber}] ⚠️ ScrapingBee returned 401 (Unauthorized) with URL: ${trackingUrl}`);
-              console.warn(`[${trackingNumber}] This likely means Royal Mail is blocking ScrapingBee's requests`);
+              // 401 Unauthorized - Royal Mail is blocking ScrapingAnt
+              console.warn(`[${trackingNumber}] ⚠️ ScrapingAnt returned 401 (Unauthorized) with URL: ${trackingUrl}`);
+              console.warn(`[${trackingNumber}] This likely means Royal Mail is blocking ScrapingAnt's requests`);
               // Try next URL format - maybe a different URL will work
               continue;
             } else if (status === 403) {
               // 403 Forbidden - Similar to 401, blocked access
-              console.warn(`[${trackingNumber}] ⚠️ ScrapingBee returned 403 (Forbidden) with URL: ${trackingUrl}`);
+              console.warn(`[${trackingNumber}] ⚠️ ScrapingAnt returned 403 (Forbidden) with URL: ${trackingUrl}`);
               continue;
             } else if (status === 503) {
-              // 503 Service Unavailable (ScrapingBee infrastructure issue)
-              console.warn(`[${trackingNumber}] ⚠️ ScrapingBee returned 503 (Service Unavailable) with URL: ${trackingUrl}`);
+              // 503 Service Unavailable (ScrapingAnt infrastructure issue)
+              console.warn(`[${trackingNumber}] ⚠️ ScrapingAnt returned 503 (Service Unavailable) with URL: ${trackingUrl}`);
               // Try next URL format on 503
               continue;
             } else if (requestError.code === 'ECONNABORTED') {
@@ -656,7 +597,7 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
   }
 }
 
-// No need for browser cleanup with ScrapingBee
+// No need for browser cleanup with ScrapingAnt
 export async function closeBrowser(): Promise<void> {
-  // No-op - ScrapingBee is API-based
+  // No-op - ScrapingAnt is API-based
 }
