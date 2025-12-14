@@ -108,13 +108,13 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
     // Clean tracking number (remove spaces) for URL
     const cleanTrackingNumber = trackingNumber.replace(/\s+/g, '');
     
-    // Try multiple URL formats - Query parameter format worked for one tracking number
-    // Prioritize query parameter format since it worked before
+    // Try multiple URL formats - Hash-based works (user confirmed modal appears then shows tracking)
+    // Prioritize hash-based format since it works when modal is accepted
     const urlFormats = [
-      `https://www.royalmail.com/track-trace?trackNumber=${cleanTrackingNumber}`, // Query param (HTTPS) - This worked!
+      `https://www.royalmail.com/track-your-item#/tracking-results/${cleanTrackingNumber}`, // Hash-based (works!)
+      `https://www.royalmail.com/track-trace?trackNumber=${cleanTrackingNumber}`, // Query param (HTTPS)
       `http://www.royalmail.com/track-trace?trackNumber=${cleanTrackingNumber}`, // Query param (HTTP)
       `https://www.royalmail.com/track-your-item?trackNumber=${cleanTrackingNumber}`, // Alternative query param
-      `https://www.royalmail.com/track-your-item#/tracking-results/${cleanTrackingNumber}`, // Hash-based (fallback)
     ];
     
     // Retry up to 2 times to save credits
@@ -149,27 +149,123 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
             encodedUrl = encodeURI(trackingUrl);
           }
           
-          // Simplified approach: Just wait for content to load
-          // One tracking number worked, so Royal Mail can process query params naturally
-          // Don't try to manipulate cookies - let ScrapingBee and Royal Mail handle it
-          const jsSnippet = null; // No JavaScript manipulation - keep it simple
+          // Use JavaScript to accept cookie modal and wait for tracking content
+          // Hash-based URL shows a modal that needs to be accepted before tracking loads
+          const isHashBased = trackingUrl.includes('#/tracking-results/');
+          const jsSnippet = `
+            (async function() {
+              // Wait for page to load
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              
+              // Find and click cookie modal accept button
+              // Try multiple selectors for the modal
+              let modalAccepted = false;
+              
+              // Method 1: Look for modal/dialog elements
+              const modals = document.querySelectorAll('[role="dialog"], .modal, [class*="modal"], [id*="modal"], [class*="cookie"], [id*="cookie"], [class*="consent"], [id*="consent"]');
+              for (const modal of modals) {
+                // Look for accept button inside modal
+                const buttons = modal.querySelectorAll('button, a, [role="button"]');
+                for (const btn of buttons) {
+                  const text = (btn.textContent || btn.innerText || '').toLowerCase().trim();
+                  if (text.includes('accept') || text.includes('continue') || text === 'ok' || text === 'yes') {
+                    btn.click();
+                    modalAccepted = true;
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    break;
+                  }
+                }
+                if (modalAccepted) break;
+              }
+              
+              // Method 2: Look for overlay/backdrop with buttons
+              if (!modalAccepted) {
+                const overlays = document.querySelectorAll('[class*="overlay"], [class*="backdrop"], [class*="popup"]');
+                for (const overlay of overlays) {
+                  const buttons = overlay.querySelectorAll('button, a');
+                  for (const btn of buttons) {
+                    const text = (btn.textContent || btn.innerText || '').toLowerCase().trim();
+                    if (text.includes('accept') || text.includes('continue') || text === 'ok') {
+                      btn.click();
+                      modalAccepted = true;
+                      await new Promise(resolve => setTimeout(resolve, 2000));
+                      break;
+                    }
+                  }
+                  if (modalAccepted) break;
+                }
+              }
+              
+              // Method 3: Look for any visible button with accept/continue text
+              if (!modalAccepted) {
+                const allButtons = Array.from(document.querySelectorAll('button, a, [role="button"]'));
+                for (const btn of allButtons) {
+                  const text = (btn.textContent || btn.innerText || '').toLowerCase().trim();
+                  const style = window.getComputedStyle(btn);
+                  // Check if button is visible and has accept text
+                  if ((text.includes('accept') || text.includes('continue')) && 
+                      style.display !== 'none' && style.visibility !== 'hidden' &&
+                      style.opacity !== '0') {
+                    btn.click();
+                    modalAccepted = true;
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    break;
+                  }
+                }
+              }
+              
+              // For hash-based URLs, ensure hash is set
+              if (${isHashBased ? 'true' : 'false'}) {
+                window.location.hash = '#/tracking-results/${cleanTrackingNumber}';
+                await new Promise(resolve => setTimeout(resolve, 3000));
+              }
+              
+              // Wait for tracking content to load
+              const trackingNumber = '${cleanTrackingNumber}';
+              let attempts = 0;
+              const maxAttempts = 30; // 15 seconds max (30 * 500ms)
+              
+              while (attempts < maxAttempts) {
+                const text = (document.body.innerText || document.body.textContent || '').toLowerCase();
+                const hasTrackingContent = text.includes('tracking number') || 
+                                          text.includes('service used') ||
+                                          text.includes('delivered') ||
+                                          text.includes("we've got it") ||
+                                          text.includes('expect to deliver') ||
+                                          text.includes('on its way') ||
+                                          text.includes(trackingNumber.toLowerCase());
+                
+                // Make sure it's not just the search form
+                const isSearchForm = text.includes('your reference number') && 
+                                   !text.includes('tracking number') &&
+                                   !text.includes('service used');
+                
+                if (hasTrackingContent && !isSearchForm) {
+                  return true; // Tracking content loaded
+                }
+                
+                await new Promise(resolve => setTimeout(resolve, 500));
+                attempts++;
+              }
+              
+              return false; // Timeout
+            })();
+          `.trim();
           
-          // Simple, direct approach - this worked for one tracking number
-          // Royal Mail scraping is unreliable due to inconsistent cookie banner
-          // Use this as best-effort; rely on manual status updates for reliability
           const response = await axios.get('https://app.scrapingbee.com/api/v1/', {
             params: {
               api_key: SCRAPINGBEE_API_KEY,
               url: encodedUrl, // Direct URL with properly encoded query parameter
               render_js: 'true', // Enable JavaScript rendering for dynamic content
-              wait: '15000', // 15 second wait
+              js_snippet: Buffer.from(jsSnippet).toString('base64'), // Accept modal and wait for content
+              wait: '20000', // 20 second wait (2s initial + 2s modal + 3s hash + 15s content)
               premium_proxy: 'true', // Use premium proxies for better success rate
               block_resources: 'false', // Don't block any resources
               window_width: '1920',
               window_height: '1080',
               country_code: 'GB', // UK geolocation
             },
-            timeout: 35000, // 35 second timeout
+            timeout: 40000, // 40 second timeout
           });
           
           html = response.data;
