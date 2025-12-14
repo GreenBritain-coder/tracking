@@ -35,8 +35,8 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
         await new Promise(resolve => setTimeout(resolve, delay));
       }
       
-      // Use slightly different wait times per attempt to avoid patterns
-      const waitTime = 18000 + (attempt * 2000); // 20s, 22s, 24s
+      // Use longer wait times for Royal Mail's slow SPA
+      const waitTime = 25000 + (attempt * 5000); // 30s, 35s, 40s
       
       try {
         const response = await axios.get('https://app.scrapingbee.com/api/v1/', {
@@ -50,7 +50,7 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
             window_width: '1920',
             window_height: '1080',
           },
-          timeout: 40000, // 40 second timeout
+          timeout: 60000, // 60 second timeout (to accommodate 40s wait time)
         });
 
         html = response.data;
