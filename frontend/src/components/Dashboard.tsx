@@ -370,19 +370,23 @@ export default function Dashboard() {
                     {editingTrackingId === tn.id ? (
                       <div className="timestamp-edit">
                         <input
-                          type="datetime-local"
-                          value={customTimestamp || (tn.custom_timestamp ? new Date(tn.custom_timestamp).toISOString().slice(0, 16) : '')}
+                          type="date"
+                          value={customTimestamp || (tn.custom_timestamp ? new Date(tn.custom_timestamp).toISOString().slice(0, 10) : '')}
                           onChange={(e) => setCustomTimestamp(e.target.value)}
                           onBlur={() => {
                             if (customTimestamp) {
-                              handleStatusChange(tn.id, tn.current_status, tn.postbox_id, customTimestamp);
+                              // Convert date to ISO timestamp (midnight UTC)
+                              const dateTimestamp = customTimestamp ? new Date(customTimestamp + 'T00:00:00Z').toISOString() : null;
+                              handleStatusChange(tn.id, tn.current_status, tn.postbox_id, dateTimestamp);
                             } else {
                               setEditingTrackingId(null);
                             }
                           }}
                           onKeyPress={(e) => {
                             if (e.key === 'Enter' && customTimestamp) {
-                              handleStatusChange(tn.id, tn.current_status, tn.postbox_id, customTimestamp);
+                              // Convert date to ISO timestamp (midnight UTC)
+                              const dateTimestamp = customTimestamp ? new Date(customTimestamp + 'T00:00:00Z').toISOString() : null;
+                              handleStatusChange(tn.id, tn.current_status, tn.postbox_id, dateTimestamp);
                             } else if (e.key === 'Escape') {
                               setEditingTrackingId(null);
                               setCustomTimestamp('');
@@ -392,7 +396,9 @@ export default function Dashboard() {
                         />
                         <button onClick={() => {
                           if (customTimestamp) {
-                            handleStatusChange(tn.id, tn.current_status, tn.postbox_id, customTimestamp);
+                            // Convert date to ISO timestamp (midnight UTC)
+                            const dateTimestamp = customTimestamp ? new Date(customTimestamp + 'T00:00:00Z').toISOString() : null;
+                            handleStatusChange(tn.id, tn.current_status, tn.postbox_id, dateTimestamp);
                           } else {
                             setEditingTrackingId(null);
                           }
@@ -408,7 +414,7 @@ export default function Dashboard() {
                         <button 
                           onClick={() => {
                             setEditingTrackingId(tn.id);
-                            setCustomTimestamp(tn.custom_timestamp ? new Date(tn.custom_timestamp).toISOString().slice(0, 16) : '');
+                            setCustomTimestamp(tn.custom_timestamp ? new Date(tn.custom_timestamp).toISOString().slice(0, 10) : '');
                           }}
                           className="edit-timestamp-btn"
                           title="Edit timestamp"
@@ -427,7 +433,9 @@ export default function Dashboard() {
                         onChange={(e) => {
                           const newStatus = e.target.value as 'not_scanned' | 'scanned' | 'delivered';
                           if (editingTrackingId === tn.id && customTimestamp) {
-                            handleStatusChange(tn.id, newStatus, tn.postbox_id, customTimestamp);
+                            // Convert date to ISO timestamp (midnight UTC)
+                            const dateTimestamp = customTimestamp ? new Date(customTimestamp + 'T00:00:00Z').toISOString() : null;
+                            handleStatusChange(tn.id, newStatus, tn.postbox_id, dateTimestamp);
                           } else {
                             handleStatusChange(tn.id, newStatus, tn.postbox_id, tn.custom_timestamp || null);
                           }
