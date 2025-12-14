@@ -56,22 +56,31 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
         html = response.data;
         console.log(`[${trackingNumber}] Received HTML (attempt ${attempt}), length: ${html.length} bytes`);
         
-        // Quick check: does this look like tracking content?
-        const quickCheck = html.toLowerCase();
+        // Quick check: Extract a sample of text to verify it's tracking content, not search form
+        // Remove HTML tags to get plain text sample
+        const textSample = html
+          .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+          .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/\s+/g, ' ')
+          .toLowerCase()
+          .substring(0, 2000); // First 2000 chars should be enough
+        
         // Check for actual tracking results (not search form)
         const hasTrackingResults = (
-          (quickCheck.includes('tracking number:') && quickCheck.includes('service used:')) ||
-          quickCheck.includes('we\'ve got it') || 
-          quickCheck.includes('expect to deliver') ||
-          (quickCheck.includes('delivered') && quickCheck.includes('tracking number:')) ||
-          (html.length < 300000 && quickCheck.includes('service used:'))
+          (textSample.includes('tracking number:') && textSample.includes('service used:')) ||
+          textSample.includes('we\'ve got it') || 
+          textSample.includes('expect to deliver') ||
+          (textSample.includes('delivered') && textSample.includes('tracking number:')) ||
+          (textSample.includes('your item was delivered') && textSample.includes('tracking number:'))
         );
         
-        // Also check that it's NOT the search form
-        const isSearchForm = quickCheck.includes('your reference number*') && 
-                            !quickCheck.includes('tracking number:') &&
-                            !quickCheck.includes('we\'ve got it') &&
-                            !quickCheck.includes('delivered');
+        // Check that it's NOT the search form (search form has "your reference number*" but no actual tracking data)
+        const isSearchForm = textSample.includes('your reference number*') && 
+                            !textSample.includes('tracking number:') &&
+                            !textSample.includes('we\'ve got it') &&
+                            !textSample.includes('delivered') &&
+                            !textSample.includes('service used:');
         
         if (hasTrackingResults && !isSearchForm) {
           console.log(`[${trackingNumber}] Tracking content detected on attempt ${attempt}`);
