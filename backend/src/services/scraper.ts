@@ -17,7 +17,34 @@ function parseTrackingMoreResponse(data: any, trackingNumber: string): {
     console.log(`[${trackingNumber}] Parsing TrackingMore response:`, JSON.stringify(data, null, 2).substring(0, 1000));
     
     // TrackingMore API response structure - try multiple possible formats
-    const trackingData = data?.data || data?.item || data;
+    // Handle case where data.data is an empty array vs an object
+    let trackingData;
+    if (data?.data) {
+      if (Array.isArray(data.data)) {
+        // If data is an array, use first item if available, otherwise it's empty
+        if (data.data.length > 0) {
+          trackingData = data.data[0];
+        } else {
+          // Empty array - tracking exists but no data yet
+          trackingData = null;
+        }
+      } else {
+        // data is an object
+        trackingData = data.data;
+      }
+    } else {
+      trackingData = data?.item || data;
+    }
+    
+    // If no tracking data found, return not_scanned
+    if (!trackingData || (Array.isArray(trackingData) && trackingData.length === 0)) {
+      console.log(`[${trackingNumber}] TrackingMore: Empty data array - tracking exists but not yet processed`);
+      return {
+        status: 'not_scanned',
+        details: 'Tracking exists in TrackingMore but not yet processed',
+        statusHeader: 'Pending',
+      };
+    }
     
     // Try different status field names
     const statusText = trackingData?.status || 
@@ -255,8 +282,54 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
           );
           
           if (getResponse.status === 200 && getResponse.data) {
-            console.log(`[${trackingNumber}] Successfully fetched tracking data from TrackingMore`);
-            return parseTrackingMoreResponse(getResponse.data, trackingNumber);
+            // Check if response has actual data (not just empty array)
+            const responseData = getResponse.data;
+            const hasData = responseData?.data && 
+              ((Array.isArray(responseData.data) && responseData.data.length > 0) ||
+               (!Array.isArray(responseData.data) && Object.keys(responseData.data).length > 0));
+            
+            if (hasData) {
+              console.log(`[${trackingNumber}] Successfully fetched tracking data from TrackingMore`);
+              return parseTrackingMoreResponse(responseData, trackingNumber);
+            } else {
+              // Response is 200 but data is empty - might need to wait longer or use different endpoint
+              console.log(`[${trackingNumber}] GET returned 200 but data is empty, trying shipments endpoint...`);
+              
+              // Try shipments endpoint as alternative
+              try {
+                const shipmentsResponse = await axios.get(
+                  `${TRACKINGMORE_API_BASE}/shipments`,
+                  {
+                    params: {
+                      tracking_number: cleanTrackingNumber,
+                    },
+                    headers: {
+                      'Tracking-Api-Key': TRACKINGMORE_API_KEY,
+                    },
+                    timeout: 30000,
+                  }
+                );
+                
+                if (shipmentsResponse.status === 200 && shipmentsResponse.data?.data) {
+                  const shipmentsData = shipmentsResponse.data.data;
+                  // Find the matching tracking number
+                  const shipment = Array.isArray(shipmentsData) 
+                    ? shipmentsData.find((s: any) => s.tracking_number === cleanTrackingNumber)
+                    : shipmentsData;
+                  
+                  if (shipment) {
+                    console.log(`[${trackingNumber}] Found tracking data via shipments endpoint`);
+                    return parseTrackingMoreResponse({ data: shipment }, trackingNumber);
+                  }
+                }
+              } catch (shipmentsError) {
+                // Ignore shipments endpoint errors, continue with original response
+                console.log(`[${trackingNumber}] Shipments endpoint failed, using original response`);
+              }
+              
+              // If shipments endpoint also fails, continue to next courier code
+              continue;
+            }
           }
         } catch (getError) {
           // 404 is expected if tracking not found yet, don't log as error
