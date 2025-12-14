@@ -136,8 +136,18 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
         try {
           console.log(`[${trackingNumber}] Trying URL: ${trackingUrl}`);
           
-          // Ensure URL is properly encoded
-          const encodedUrl = encodeURI(trackingUrl);
+          // Ensure URL is properly encoded - use encodeURIComponent for query params
+          let encodedUrl = trackingUrl;
+          if (trackingUrl.includes('?')) {
+            const [base, query] = trackingUrl.split('?');
+            const encodedQuery = query.split('&').map(param => {
+              const [key, value] = param.split('=');
+              return `${key}=${encodeURIComponent(value)}`;
+            }).join('&');
+            encodedUrl = `${base}?${encodedQuery}`;
+          } else {
+            encodedUrl = encodeURI(trackingUrl);
+          }
           
           // Use JavaScript to accept cookies and wait for content to load
           // Handle both hash-based routing and query parameter formats
@@ -204,20 +214,25 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
                 } catch(e) {}
               }
               
-              // Wait a bit longer after accepting cookies, then reload if needed
+              // Wait after accepting cookies to let them take effect
               if (cookieAccepted) {
-                await new Promise(resolve => setTimeout(resolve, 2000));
-                // Reload page to ensure cookies are applied and query param is processed
-                if (!${isHashBased ? 'true' : 'false'}) {
-                  window.location.reload();
-                  await new Promise(resolve => setTimeout(resolve, 3000));
-                }
+                await new Promise(resolve => setTimeout(resolve, 3000));
               }
               
               // For hash-based URLs, navigate to hash and wait
               if (${isHashBased ? 'true' : 'false'}) {
                 window.location.hash = '#/tracking-results/${cleanTrackingNumber}';
                 await new Promise(resolve => setTimeout(resolve, 4000));
+              }
+              
+              // For query parameter URLs, ensure the page processes the query param
+              // Sometimes Royal Mail needs a moment to process the query parameter
+              if (!${isHashBased ? 'true' : 'false'}) {
+                // Check if we're on the right page with query param
+                if (window.location.search.includes('trackNumber')) {
+                  // Wait a bit for query param to be processed
+                  await new Promise(resolve => setTimeout(resolve, 2000));
+                }
               }
               
               // Wait for tracking content to load
