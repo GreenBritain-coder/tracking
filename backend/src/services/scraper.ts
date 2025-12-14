@@ -108,55 +108,32 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
     // Clean tracking number (remove spaces) for URL
     const cleanTrackingNumber = trackingNumber.replace(/\s+/g, '');
     
-    // Step 1: Get cookies from main page first (cookie chaining approach)
-    // This is more reliable than trying to click the cookie modal on each request
+    // Step 1: Get cookies from main Royal Mail page (two-step approach)
+    // First scrape the main page to get cookies, then use those cookies for tracking page
     let cookies = '';
     try {
-      console.log(`[${trackingNumber}] Step 1: Getting cookies from main page...`);
-      const mainPageUrl = 'https://www.royalmail.com/track-your-item';
-      // JavaScript to accept cookies - try multiple selectors
-      const cookieAcceptJs = `
-        (function() {
-          // Try the specific selector first
-          const btn = document.querySelector('button[data-accept-cookies]');
-          if (btn) {
-            btn.click();
-            return;
-          }
-          // Fallback: find by text content
-          const buttons = Array.from(document.querySelectorAll('button, a, [role="button"]'));
-          for (const btn of buttons) {
-            const text = (btn.textContent || btn.innerText || '').toLowerCase().trim();
-            if ((text.includes('accept') || text.includes('continue') || text === 'ok') && 
-                text.length < 30 && btn.offsetParent !== null) {
-              btn.click();
-              break;
-            }
-          }
-        })();
-      `.trim();
-      
-      // Base64 encode the JavaScript snippet (ScrapingAnt requires base64 for js_snippet)
-      const jsSnippetBase64 = Buffer.from(cookieAcceptJs).toString('base64');
+      console.log(`[${trackingNumber}] Step 1: Getting cookies from main Royal Mail page...`);
+      const mainPageUrl = 'https://www.royalmail.com'; // Use main page, not tracking page
       
       const cookieResponse = await axios.get('https://api.scrapingant.com/v2/general', {
         params: {
           url: mainPageUrl,
           browser: 'true',
-          js_snippet: jsSnippetBase64, // Use js_snippet with base64 encoding
-          wait: '10000', // 10 seconds: 2s initial + 2s cookie click + 6s for cookies to be set
+          wait: '10000', // 10 seconds for page to load and cookies to be set
           proxy_country: 'GB',
         },
         headers: {
-          'x-api-key': SCRAPINGANT_API_KEY, // API key in header, not query parameter
+          'x-api-key': SCRAPINGANT_API_KEY,
         },
         timeout: 60000, // 60 seconds timeout
       });
       
       // Extract cookies from response (ScrapingAnt returns cookies as a string)
+      // Format: cookie_name_1=cookie_value_1;cookie_name_2=cookie_value_2
       cookies = cookieResponse.data?.cookies || '';
       if (cookies) {
         console.log(`[${trackingNumber}] ✅ Successfully obtained cookies (length: ${cookies.length} chars)`);
+        console.log(`[${trackingNumber}] Cookies format: ${cookies.substring(0, 100)}...`);
       } else {
         console.warn(`[${trackingNumber}] ⚠️ No cookies returned from main page, continuing without cookies`);
       }
@@ -266,10 +243,10 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
             proxy_country: 'GB',
           };
           
-          // Use cookies if we have them (more reliable than JavaScript clicking)
+          // Use cookies from Step 1 if we have them (bypasses cookie modal completely)
           if (cookies) {
-            params.cookies = cookies;
-            console.log(`[${trackingNumber}] Using cookies from initial request`);
+            params.cookies = cookies; // Format: cookie_name_1=cookie_value_1;cookie_name_2=cookie_value_2
+            console.log(`[${trackingNumber}] Using cookies from main page (should bypass cookie modal)`);
           } else {
             // Fallback: use js_snippet to accept cookies if we don't have them
             params.js_snippet = jsSnippetBase64;
