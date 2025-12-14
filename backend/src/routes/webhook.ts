@@ -77,12 +77,27 @@ function extractStatusHeader(webhookData: any): string | undefined {
 
 /**
  * Test endpoint to verify webhook route is accessible
+ * This should return JSON, not a blank page
  */
 router.get('/trackingmore/test', (req: Request, res: Response) => {
+  console.log('Test endpoint accessed');
+  res.setHeader('Content-Type', 'application/json');
   res.json({ 
     message: 'Webhook endpoint is accessible', 
     timestamp: new Date().toISOString(),
-    webhookSecretConfigured: !!WEBHOOK_SECRET
+    webhookSecretConfigured: !!WEBHOOK_SECRET,
+    path: '/api/webhook/trackingmore/test'
+  });
+});
+
+// Catch-all for webhook routes to help debug
+router.all('/trackingmore/*', (req: Request, res: Response) => {
+  console.log(`Unhandled webhook route: ${req.method} ${req.path}`);
+  res.status(404).json({ 
+    error: 'Webhook route not found',
+    method: req.method,
+    path: req.path,
+    availableRoutes: ['GET /trackingmore/test', 'POST /trackingmore']
   });
 });
 
