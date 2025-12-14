@@ -105,8 +105,8 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
 
     console.log(`[${trackingNumber}] Fetching via ScrapingBee...`);
     
-    // Use ScrapingBee to render the Royal Mail tracking page
-    const trackingUrl = `https://www.royalmail.com/track-your-item#/tracking-results/${trackingNumber}`;
+    // Use base URL and navigate via JavaScript (hash routing requires JS execution)
+    const baseUrl = 'https://www.royalmail.com/track-your-item';
     
     // Retry up to 5 times if we don't get tracking content
     let html = '';
@@ -121,21 +121,60 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
         await new Promise(resolve => setTimeout(resolve, delay));
       }
       
-      // Use longer wait times (18-26s) to give Royal Mail's JS more time to load
-      const waitTime = 18000 + (attempt * 2000); // 18s, 20s, 22s, 24s, 26s
-      
       try {
-        // Use a longer fixed wait instead of wait_for
-        // Hash routing (#/tracking-results/) requires more time for JS to execute
-        // wait_for doesn't work well with hash routing since article exists on both search form and results
+        // Use JavaScript snippet to navigate to tracking results and wait for content
+        // This ensures hash routing executes properly
+        const jsSnippet = `
+          (async function() {
+            // Navigate to tracking results via hash
+            window.location.hash = '#/tracking-results/${trackingNumber}';
+            
+            // Wait for hash change event
+            await new Promise(resolve => {
+              const checkHash = () => {
+                if (window.location.hash.includes('tracking-results')) {
+                  resolve();
+                } else {
+                  setTimeout(checkHash, 100);
+                }
+              };
+              checkHash();
+            });
+            
+            // Wait for content to load (check for tracking-specific content)
+            let attempts = 0;
+            const maxAttempts = 40; // 20 seconds max (40 * 500ms)
+            
+            while (attempts < maxAttempts) {
+              const text = document.body.innerText || document.body.textContent || '';
+              const hasTrackingContent = text.includes('Tracking number:') || 
+                                        text.includes('Service used:') ||
+                                        text.includes('Delivered') ||
+                                        text.includes("We've got it") ||
+                                        text.includes('expect to deliver');
+              
+              if (hasTrackingContent) {
+                return true; // Content loaded
+              }
+              
+              await new Promise(resolve => setTimeout(resolve, 500));
+              attempts++;
+            }
+            
+            return false; // Timeout
+          })();
+        `;
+        
+        // Fixed wait time - JS snippet handles the actual waiting
         const fixedWaitTime = Math.min(15000 + (attempt * 2000), 25000); // 15s-25s, increasing with attempts
         
         const response = await axios.get('https://app.scrapingbee.com/api/v1/', {
           params: {
             api_key: SCRAPINGBEE_API_KEY,
-            url: trackingUrl,
+            url: baseUrl, // Base URL without hash
             render_js: 'true', // Enable JavaScript rendering
-            wait: fixedWaitTime.toString(), // Fixed wait time for hash routing to execute
+            js_snippet: jsSnippet, // Execute JS to navigate and wait for content
+            wait: fixedWaitTime.toString(), // Fixed wait time as backup
             premium_proxy: 'true', // Use premium proxies for better success rate
             block_resources: 'false', // Don't block any resources
             window_width: '1920',
