@@ -252,28 +252,38 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
           const errorCode = errorData?.meta?.code;
           const errorStatus = createError.response.status;
           
-          // Handle 400 with code 4101: "Tracking No. already exists" - response includes tracking data
+          // Handle 400 with code 4101: "Tracking No. already exists" - response may only have minimal data
           if (errorStatus === 400 && errorCode === 4101) {
-            console.log(`[${trackingNumber}] Tracking already exists in TrackingMore (4101), using data from response`);
-            if (errorData?.data && (!Array.isArray(errorData.data) || errorData.data.length > 0)) {
-              if (!Array.isArray(errorData.data) && Object.keys(errorData.data).length > 0) {
-                console.log(`[${trackingNumber}] 400/4101 response contains tracking data, using it`);
+            console.log(`[${trackingNumber}] Tracking already exists in TrackingMore (4101), checking if response has full data`);
+            if (errorData?.data && !Array.isArray(errorData.data)) {
+              const dataObj = errorData.data;
+              // Check if response has actual status information (not just id/tracking_number/courier_code)
+              if (dataObj.delivery_status || dataObj.latest_event || dataObj.origin_info?.trackinfo?.length > 0) {
+                console.log(`[${trackingNumber}] 400/4101 response contains full tracking data, using it`);
                 return parseTrackingMoreResponse(errorData, trackingNumber);
+              } else {
+                console.log(`[${trackingNumber}] 400/4101 response only has minimal data (id/tracking_number), will fetch full data via GET`);
               }
             }
-            trackingCreated = true; // Tracking exists, we can try to GET it
+            trackingCreated = true; // Tracking exists, we need to GET it for full data
           }
           // Handle 409: Tracking already exists (alternative status code)
           else if (errorStatus === 409) {
-            console.log(`[${trackingNumber}] Tracking already exists in TrackingMore (409)`);
-            if (errorData?.data) {
-              if ((Array.isArray(errorData.data) && errorData.data.length > 0) ||
-                  (!Array.isArray(errorData.data) && Object.keys(errorData.data).length > 0)) {
-                console.log(`[${trackingNumber}] 409 response contains tracking data, using it`);
+            console.log(`[${trackingNumber}] Tracking already exists in TrackingMore (409), checking if response has full data`);
+            if (errorData?.data && !Array.isArray(errorData.data)) {
+              const dataObj = errorData.data;
+              // Check if response has actual status information
+              if (dataObj.delivery_status || dataObj.latest_event || dataObj.origin_info?.trackinfo?.length > 0) {
+                console.log(`[${trackingNumber}] 409 response contains full tracking data, using it`);
                 return parseTrackingMoreResponse(errorData, trackingNumber);
+              } else {
+                console.log(`[${trackingNumber}] 409 response only has minimal data, will fetch full data via GET`);
               }
+            } else if (errorData?.data && Array.isArray(errorData.data) && errorData.data.length > 0) {
+              console.log(`[${trackingNumber}] 409 response contains tracking data array, using it`);
+              return parseTrackingMoreResponse(errorData, trackingNumber);
             }
-            trackingCreated = true; // Tracking exists, we can try to GET it
+            trackingCreated = true; // Tracking exists, we need to GET it for full data
           }
           // Handle 429: Rate limit exceeded
           // Per TrackingMore docs: wait 120 seconds after 429 error
