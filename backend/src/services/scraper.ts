@@ -315,12 +315,17 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
       // Try different GET endpoint formats
       let getResponse;
       const getFormats = [
-        // Format 1: Query params with just tracking_number (most common)
+        // Format 1: Path-based format (most likely correct based on API docs)
         {
-          url: `${TRACKINGMORE_API_BASE}/trackings/get`,
-          params: { tracking_number: cleanTrackingNumber },
+          url: `${TRACKINGMORE_API_BASE}/trackings/${courierCode}/${cleanTrackingNumber}`,
+          params: {},
         },
-        // Format 2: Query params with tracking_number and courier_code
+        // Format 2: Path-based without courier code
+        {
+          url: `${TRACKINGMORE_API_BASE}/trackings/${cleanTrackingNumber}`,
+          params: {},
+        },
+        // Format 3: Query params with tracking_number and courier_code (snake_case)
         {
           url: `${TRACKINGMORE_API_BASE}/trackings/get`,
           params: { 
@@ -328,17 +333,12 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
             courier_code: courierCode 
           },
         },
-        // Format 3: Path parameter format
-        {
-          url: `${TRACKINGMORE_API_BASE}/trackings/${cleanTrackingNumber}`,
-          params: {},
-        },
-        // Format 4: Try camelCase field names
+        // Format 4: Query params with just tracking_number
         {
           url: `${TRACKINGMORE_API_BASE}/trackings/get`,
-          params: { trackingNumber: cleanTrackingNumber },
+          params: { tracking_number: cleanTrackingNumber },
         },
-        // Format 5: Try camelCase with courierCode
+        // Format 5: Try camelCase field names
         {
           url: `${TRACKINGMORE_API_BASE}/trackings/get`,
           params: { 
