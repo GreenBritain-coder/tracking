@@ -228,19 +228,72 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
         }
       }
       
-      // If POST response was empty, the tracking hasn't been scanned yet
-      // No need to make GET request - just return not_scanned
+      // If POST response was empty, try to GET the tracking data
+      // This handles cases where tracking exists in TrackingMore but POST didn't return data
       if (!trackingCreated) {
-        console.warn(`[${trackingNumber}] Could not create tracking with any courier code`);
-        return {
-          status: 'not_scanned',
-          details: 'Tracking not found in TrackingMore',
-        };
+        console.warn(`[${trackingNumber}] Could not create tracking with any courier code, trying to fetch existing tracking...`);
+      } else {
+        console.log(`[${trackingNumber}] POST returned empty data, fetching tracking from TrackingMore...`);
       }
       
-      // If we reach here, POST was successful but returned empty data
-      // This means tracking was created but not yet scanned by Royal Mail
-      console.log(`[${trackingNumber}] Tracking created in TrackingMore but not yet scanned - returning not_scanned`);
+      // Wait a moment for TrackingMore to process (if it was just created)
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Try to GET the tracking data using the courier code we found
+      // Use path-based format: /trackings/{courier_code}/{tracking_number}
+      try {
+        console.log(`[${trackingNumber}] Fetching tracking data from TrackingMore using courier code: ${courierCode}`);
+        const getResponse = await axios.get(
+          `${TRACKINGMORE_API_BASE}/trackings/${courierCode}/${cleanTrackingNumber}`,
+          {
+            headers: {
+              'Tracking-Api-Key': TRACKINGMORE_API_KEY,
+            },
+            timeout: 30000,
+          }
+        );
+        
+        if (getResponse.status === 200 && getResponse.data) {
+          console.log(`[${trackingNumber}] Successfully fetched tracking data from TrackingMore`);
+          return parseTrackingMoreResponse(getResponse.data, trackingNumber);
+        }
+      } catch (getError) {
+          // If path-based format fails, try query parameter format (without courier_code to avoid 400 errors)
+          if (axios.isAxiosError(getError) && getError.response?.status === 404) {
+            console.log(`[${trackingNumber}] Path-based GET failed (404), trying query parameter format...`);
+            try {
+              const getResponse2 = await axios.get(
+                `${TRACKINGMORE_API_BASE}/trackings/get`,
+                {
+                  params: {
+                    tracking_number: cleanTrackingNumber,
+                  },
+                  headers: {
+                    'Tracking-Api-Key': TRACKINGMORE_API_KEY,
+                  },
+                  timeout: 30000,
+                }
+              );
+              
+              if (getResponse2.status === 200 && getResponse2.data) {
+                console.log(`[${trackingNumber}] Successfully fetched tracking data using query parameters`);
+                return parseTrackingMoreResponse(getResponse2.data, trackingNumber);
+              }
+            } catch (getError2) {
+              // Log only if it's not a 404 (404 means tracking not found, which is expected for new trackings)
+              if (axios.isAxiosError(getError2) && getError2.response?.status !== 404) {
+                console.warn(`[${trackingNumber}] GET request failed:`, getError2.response?.status, getError2.response?.data);
+              } else {
+                console.log(`[${trackingNumber}] Tracking not yet available in TrackingMore (404)`);
+              }
+            }
+          } else if (axios.isAxiosError(getError) && getError.response?.status !== 404) {
+            console.warn(`[${trackingNumber}] GET request failed:`, getError.response?.status, getError.response?.data);
+          }
+      }
+      
+      // If GET also fails or returns empty, tracking hasn't been scanned yet
+      console.log(`[${trackingNumber}] No tracking data available yet - returning not_scanned`);
       return {
         status: 'not_scanned',
         details: 'Tracking created but not yet scanned by Royal Mail',
