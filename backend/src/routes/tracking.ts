@@ -206,19 +206,35 @@ router.patch(
   '/numbers/:id/status',
   [
     body('status').isIn(['not_scanned', 'scanned', 'delivered']),
-    body('postbox_id').optional({ nullable: true, checkFalsy: true }).isInt().toInt(),
+    body('postbox_id')
+      .optional({ nullable: true, checkFalsy: true })
+      .custom((value) => {
+        // If value is null, undefined, or empty string, it's valid
+        if (value === null || value === undefined || value === '') {
+          return true;
+        }
+        // Otherwise, it must be a valid integer
+        const num = typeof value === 'string' ? parseInt(value, 10) : Number(value);
+        if (isNaN(num) || !Number.isInteger(num)) {
+          throw new Error('postbox_id must be a valid integer or null');
+        }
+        return true;
+      }),
     body('custom_timestamp').optional({ nullable: true, checkFalsy: true }).isISO8601().toDate(),
   ],
   async (req: AuthRequest, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      console.error('Validation errors:', errors.array());
+      console.error('Validation errors:', JSON.stringify(errors.array(), null, 2));
+      console.error('Request body:', JSON.stringify(req.body, null, 2));
       return res.status(400).json({ errors: errors.array() });
     }
 
     try {
       const { id } = req.params;
       const { status, postbox_id, custom_timestamp } = req.body;
+      
+      console.log(`Updating tracking ${id}: status=${status}, postbox_id=${postbox_id} (type: ${typeof postbox_id}), custom_timestamp=${custom_timestamp}`);
       
       const tracking = await getTrackingNumberById(Number(id));
       if (!tracking) {
