@@ -352,6 +352,24 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
             
             if (trackingData) {
               console.log(`[${trackingNumber}] Successfully fetched tracking data from TrackingMore`);
+              console.log(`[${trackingNumber}] GET response delivery_status: ${trackingData.delivery_status}`);
+              
+              // Check if delivery_status is "pending" but tracking might actually be delivered
+              // Sometimes TrackingMore API returns stale "pending" even when dashboard shows "delivered"
+              // Check for other indicators like latest_event, trackinfo, etc.
+              if (trackingData.delivery_status === 'pending' || !trackingData.delivery_status) {
+                // Check if there are tracking events that might indicate actual status
+                const hasEvents = trackingData.origin_info?.trackinfo?.length > 0 || 
+                                 trackingData.destination_info?.trackinfo?.length > 0;
+                const hasLatestEvent = !!trackingData.latest_event;
+                
+                if (hasEvents || hasLatestEvent) {
+                  console.log(`[${trackingNumber}] GET returned "pending" but has events/latest_event - may be stale data, will parse anyway`);
+                } else {
+                  console.log(`[${trackingNumber}] GET returned "pending" with no events - likely truly pending`);
+                }
+              }
+              
               // Wrap in the expected format for parseTrackingMoreResponse
               return parseTrackingMoreResponse({ data: trackingData }, trackingNumber);
             } else {

@@ -76,31 +76,59 @@ function extractStatusHeader(webhookData: any): string | undefined {
 }
 
 /**
+ * Test endpoint to verify webhook route is accessible
+ */
+router.get('/trackingmore/test', (req: Request, res: Response) => {
+  res.json({ 
+    message: 'Webhook endpoint is accessible', 
+    timestamp: new Date().toISOString(),
+    webhookSecretConfigured: !!WEBHOOK_SECRET
+  });
+});
+
+/**
  * TrackingMore webhook endpoint
  * Receives POST requests from TrackingMore when tracking status changes
  */
 router.post('/trackingmore', async (req: any, res: Response) => {
+  // Enhanced logging - log ALL incoming requests
+  console.log('=== WEBHOOK REQUEST RECEIVED ===');
+  console.log('Timestamp:', new Date().toISOString());
+  console.log('Method:', req.method);
+  console.log('URL:', req.url);
+  console.log('Headers:', JSON.stringify(req.headers, null, 2));
+  console.log('Has body:', !!req.body);
+  console.log('Body type:', typeof req.body);
+  
   try {
     // Get raw body for signature verification
     const rawBody = req.rawBody || JSON.stringify(req.body);
+    console.log('Raw body length:', rawBody.length);
+    console.log('Raw body preview:', rawBody.substring(0, 200));
     
     // Get signature from header
     // TrackingMore may send signature in different header formats
     const signature = req.headers['x-signature'] as string || 
                      req.headers['x-trackingmore-signature'] as string ||
                      req.headers['signature'] as string;
+    console.log('Signature header present:', !!signature);
+    console.log('Webhook secret configured:', !!WEBHOOK_SECRET);
 
     // Verify webhook signature (if secret is configured)
     if (WEBHOOK_SECRET && !verifyWebhookSignature(rawBody, signature)) {
       console.error('Webhook signature verification failed');
+      console.error('Expected signature format: SHA256 HMAC of raw body');
       return res.status(401).json({ error: 'Invalid signature' });
+    } else if (WEBHOOK_SECRET) {
+      console.log('Webhook signature verified successfully');
     }
 
     // Use parsed body (from express.json middleware) or parse raw body
     const webhookData = req.body || JSON.parse(rawBody);
 
     // Log webhook received
-    console.log('Webhook received from TrackingMore:', JSON.stringify(webhookData, null, 2).substring(0, 500));
+    console.log('=== WEBHOOK PAYLOAD ===');
+    console.log('Webhook received from TrackingMore:', JSON.stringify(webhookData, null, 2).substring(0, 1000));
 
     // Extract tracking information from webhook payload
     // TrackingMore webhook structure: { code, message, data: { tracking_number, delivery_status, ... } }

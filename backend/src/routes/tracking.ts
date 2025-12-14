@@ -20,6 +20,7 @@ import {
 } from '../models/postbox';
 import { getStatusHistory } from '../models/statusHistory';
 import { updateAllTrackingStatuses } from '../services/scheduler';
+import { checkRoyalMailStatus } from '../services/scraper';
 
 const router = express.Router();
 
@@ -180,6 +181,40 @@ router.delete('/numbers/:id', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('Error deleting tracking number:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Manual refresh endpoint for a single tracking number
+router.post('/numbers/:id/refresh', async (req: AuthRequest, res: Response) => {
+  try {
+    const id = parseInt(req.params.id);
+    const tracking = await getTrackingNumberById(id);
+    
+    if (!tracking) {
+      return res.status(404).json({ error: 'Tracking number not found' });
+    }
+
+    console.log(`Manual refresh requested for ${tracking.tracking_number}`);
+    
+    const result = await checkRoyalMailStatus(tracking.tracking_number);
+    
+    // Update status if changed
+    if (result.status !== tracking.current_status || result.statusHeader !== tracking.status_details) {
+      await updateTrackingStatus(tracking.id, result.status, result.statusHeader);
+      console.log(`Manual refresh updated ${tracking.tracking_number}: ${tracking.current_status} -> ${result.status}`);
+    }
+    
+    // Get updated tracking
+    const updated = await getTrackingNumberById(id);
+    res.json({ 
+      message: 'Tracking status refreshed',
+      tracking: updated,
+      status: result.status,
+      statusHeader: result.statusHeader
+    });
+  } catch (error) {
+    console.error('Error in manual refresh:', error);
+    res.status(500).json({ error: 'Failed to refresh tracking status' });
   }
 });
 
