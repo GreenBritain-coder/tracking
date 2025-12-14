@@ -124,46 +124,41 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
       try {
         // Use JavaScript snippet to navigate to tracking results and wait for content
         // This ensures hash routing executes properly
+        // ScrapingBee requires js_snippet to be base64 encoded
         const jsSnippet = `
-          (async function() {
-            // Navigate to tracking results via hash
-            window.location.hash = '#/tracking-results/${trackingNumber}';
-            
-            // Wait for hash change event
-            await new Promise(resolve => {
-              const checkHash = () => {
-                if (window.location.hash.includes('tracking-results')) {
-                  resolve();
-                } else {
-                  setTimeout(checkHash, 100);
-                }
-              };
-              checkHash();
-            });
-            
-            // Wait for content to load (check for tracking-specific content)
-            let attempts = 0;
-            const maxAttempts = 40; // 20 seconds max (40 * 500ms)
-            
-            while (attempts < maxAttempts) {
-              const text = document.body.innerText || document.body.textContent || '';
-              const hasTrackingContent = text.includes('Tracking number:') || 
-                                        text.includes('Service used:') ||
-                                        text.includes('Delivered') ||
-                                        text.includes("We've got it") ||
-                                        text.includes('expect to deliver');
-              
-              if (hasTrackingContent) {
-                return true; // Content loaded
-              }
-              
-              await new Promise(resolve => setTimeout(resolve, 500));
-              attempts++;
-            }
-            
-            return false; // Timeout
-          })();
-        `;
+(async function() {
+  window.location.hash = '#/tracking-results/${trackingNumber}';
+  await new Promise(resolve => {
+    const checkHash = () => {
+      if (window.location.hash.includes('tracking-results')) {
+        resolve();
+      } else {
+        setTimeout(checkHash, 100);
+      }
+    };
+    checkHash();
+  });
+  let attempts = 0;
+  const maxAttempts = 40;
+  while (attempts < maxAttempts) {
+    const text = document.body.innerText || document.body.textContent || '';
+    const hasTrackingContent = text.includes('Tracking number:') || 
+                              text.includes('Service used:') ||
+                              text.includes('Delivered') ||
+                              text.includes("We've got it") ||
+                              text.includes('expect to deliver');
+    if (hasTrackingContent) {
+      return true;
+    }
+    await new Promise(resolve => setTimeout(resolve, 500));
+    attempts++;
+  }
+  return false;
+})();
+        `.trim();
+        
+        // Encode JavaScript snippet to base64 (required by ScrapingBee)
+        const jsSnippetBase64 = Buffer.from(jsSnippet).toString('base64');
         
         // Fixed wait time - JS snippet handles the actual waiting
         const fixedWaitTime = Math.min(15000 + (attempt * 2000), 25000); // 15s-25s, increasing with attempts
@@ -173,7 +168,7 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
             api_key: SCRAPINGBEE_API_KEY,
             url: baseUrl, // Base URL without hash
             render_js: 'true', // Enable JavaScript rendering
-            js_snippet: jsSnippet, // Execute JS to navigate and wait for content
+            js_snippet: jsSnippetBase64, // Execute JS to navigate and wait for content (base64 encoded)
             wait: fixedWaitTime.toString(), // Fixed wait time as backup
             premium_proxy: 'true', // Use premium proxies for better success rate
             block_resources: 'false', // Don't block any resources
