@@ -1,7 +1,8 @@
 import axios from 'axios';
 import { TrackingStatus } from '../models/tracking';
 
-const SCRAPINGANT_API_KEY = process.env.SCRAPINGANT_API_KEY || '';
+const TRACKINGMORE_API_KEY = process.env.TRACKINGMORE_API_KEY || '';
+const TRACKINGMORE_API_BASE = 'https://api.trackingmore.com/v4';
 
 /**
  * Parse JSON API response from Royal Mail's microsummary endpoint
@@ -64,6 +65,98 @@ function parseJsonApiResponse(data: any, trackingNumber: string): {
   }
 }
 
+/**
+ * Parse TrackingMore API response
+ */
+function parseTrackingMoreResponse(data: any, trackingNumber: string): {
+  status: TrackingStatus;
+  details?: string;
+  statusHeader?: string;
+} {
+  try {
+    // TrackingMore API response structure
+    const trackingData = data?.data || data;
+    const statusText = trackingData?.status || trackingData?.latest_status || '';
+    const statusLower = statusText.toLowerCase();
+    
+    // Extract status header/description
+    const statusHeader = trackingData?.latest_status || 
+                        trackingData?.status || 
+                        trackingData?.sub_status ||
+                        statusText;
+    
+    // Extract details from tracking events
+    const events = trackingData?.origin_info?.trackinfo || trackingData?.tracking_info || [];
+    const details = events.length > 0 
+      ? JSON.stringify(events.map((e: any) => ({
+          date: e.date || e.track_date,
+          status: e.status || e.track_status,
+          details: e.details || e.track_location
+        }))).substring(0, 500)
+      : JSON.stringify(trackingData).substring(0, 500);
+    
+    // Map TrackingMore status to our TrackingStatus enum
+    if (statusLower.includes('delivered') || 
+        statusLower.includes('delivery completed') ||
+        statusLower.includes('delivered to recipient')) {
+      console.log(`[${trackingNumber}] TrackingMore: Detected DELIVERED status`);
+      return {
+        status: 'delivered',
+        details,
+        statusHeader: statusHeader || 'Delivered',
+      };
+    } else if (statusLower.includes('in transit') || 
+               statusLower.includes('on its way') ||
+               statusLower.includes('collected') ||
+               statusLower.includes('accepted') ||
+               statusLower.includes('processed') ||
+               statusLower.includes('scanned') ||
+               statusLower.includes('we\'ve got it') ||
+               statusLower.includes('arrived') ||
+               statusLower.includes('departed') ||
+               statusLower.includes('out for delivery')) {
+      console.log(`[${trackingNumber}] TrackingMore: Detected SCANNED status`);
+      return {
+        status: 'scanned',
+        details,
+        statusHeader: statusHeader || 'In Transit',
+      };
+    } else if (statusLower.includes('not found') ||
+               statusLower.includes('no information') ||
+               statusLower.includes('pending')) {
+      console.log(`[${trackingNumber}] TrackingMore: Detected NOT_SCANNED status`);
+      return {
+        status: 'not_scanned',
+        details,
+        statusHeader: statusHeader || 'Not Scanned',
+      };
+    } else {
+      // Default: if we have any tracking info, consider it scanned
+      if (events.length > 0) {
+        console.log(`[${trackingNumber}] TrackingMore: Has tracking events, defaulting to SCANNED`);
+        return {
+          status: 'scanned',
+          details,
+          statusHeader: statusHeader || 'In Transit',
+        };
+      } else {
+        console.log(`[${trackingNumber}] TrackingMore: No tracking info, defaulting to NOT_SCANNED`);
+        return {
+          status: 'not_scanned',
+          details,
+          statusHeader: statusHeader || 'Not Scanned',
+        };
+      }
+    }
+  } catch (error) {
+    console.error(`[${trackingNumber}] Error parsing TrackingMore response:`, error);
+    return {
+      status: 'not_scanned',
+      details: 'Error parsing TrackingMore response',
+    };
+  }
+}
+
 export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
   status: TrackingStatus;
   details?: string;
@@ -90,595 +183,93 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
         return parseJsonApiResponse(apiResponse.data, trackingNumber);
       }
     } catch (apiError) {
-      console.log(`[${trackingNumber}] JSON API failed, falling back to ScrapingAnt:`, 
+      console.log(`[${trackingNumber}] JSON API failed, falling back to TrackingMore:`, 
         axios.isAxiosError(apiError) ? apiError.message : 'Unknown error');
     }
 
-    // Fall back to ScrapingAnt if JSON API fails
-    if (!SCRAPINGANT_API_KEY) {
-      console.error('ScrapingAnt API key not configured');
+    // Fall back to TrackingMore if JSON API fails
+    if (!TRACKINGMORE_API_KEY) {
+      console.error('TrackingMore API key not configured');
       return { 
         status: 'not_scanned', 
-        details: 'Both JSON API and ScrapingAnt failed' 
+        details: 'Both JSON API and TrackingMore failed' 
       };
     }
 
-    console.log(`[${trackingNumber}] Fetching via ScrapingAnt...`);
+    console.log(`[${trackingNumber}] Fetching via TrackingMore API...`);
     
-    // Clean tracking number (remove spaces) for URL
+    // Clean tracking number (remove spaces)
     const cleanTrackingNumber = trackingNumber.replace(/\s+/g, '');
     
-    // Step 1: Get cookies from main Royal Mail page (two-step approach)
-    // First scrape the main page to get cookies, then use those cookies for tracking page
-    let cookies = '';
     try {
-      console.log(`[${trackingNumber}] Step 1: Getting cookies from main Royal Mail page...`);
-      const mainPageUrl = 'https://www.royalmail.com'; // Use main page, not tracking page
+      // Step 1: Create tracking in TrackingMore (if not already exists)
+      // Carrier code for Royal Mail is typically 'royal-mail' or 'royalmail'
+      const carrierCode = 'royal-mail';
       
-      const cookieResponse = await axios.get('https://api.scrapingant.com/v2/general', {
-        params: {
-          url: mainPageUrl,
-          browser: 'true',
-          wait: '10000', // 10 seconds for page to load and cookies to be set
-          proxy_country: 'GB',
-        },
-        headers: {
-          'x-api-key': SCRAPINGANT_API_KEY,
-        },
-        timeout: 60000, // 60 seconds timeout
-      });
-      
-      // Extract cookies from response (ScrapingAnt returns cookies as a string)
-      // Format: cookie_name_1=cookie_value_1;cookie_name_2=cookie_value_2
-      cookies = cookieResponse.data?.cookies || '';
-      if (cookies) {
-        console.log(`[${trackingNumber}] ✅ Successfully obtained cookies (length: ${cookies.length} chars)`);
-        console.log(`[${trackingNumber}] Cookies format: ${cookies.substring(0, 100)}...`);
-      } else {
-        console.warn(`[${trackingNumber}] ⚠️ No cookies returned from main page, continuing without cookies`);
-      }
-      
-      // Wait a bit after getting cookies to avoid concurrency limit (random 1-3 seconds)
-      const randomDelay = 1000 + Math.floor(Math.random() * 2000); // 1-3 seconds
-      await new Promise(resolve => setTimeout(resolve, randomDelay));
-    } catch (cookieError) {
-      console.warn(`[${trackingNumber}] ⚠️ Failed to get cookies from main page:`, 
-        axios.isAxiosError(cookieError) ? cookieError.message : 'Unknown error');
-      // Continue without cookies - will try with js_snippet instead
-    }
-    
-    // Try multiple URL formats - Hash-based works (user confirmed modal appears then shows tracking)
-    // Prioritize hash-based format since it works when modal is accepted
-    const urlFormats = [
-      `https://www.royalmail.com/track-your-item#/tracking-results/${cleanTrackingNumber}`, // Hash-based (works!)
-      `https://www.royalmail.com/track-trace?trackNumber=${cleanTrackingNumber}`, // Query param (HTTPS)
-      `http://www.royalmail.com/track-trace?trackNumber=${cleanTrackingNumber}`, // Query param (HTTP)
-      `https://www.royalmail.com/track-your-item?trackNumber=${cleanTrackingNumber}`, // Alternative query param
-    ];
-    
-    // Retry up to 2 times to save credits
-    // Process URLs sequentially to avoid ScrapingAnt free plan concurrency limit (1 request at a time)
-    let html = '';
-    let attempt = 0;
-    const maxAttempts = 2;
-    let foundContent = false;
-    
-    outerLoop: for (attempt = 1; attempt <= maxAttempts; attempt++) {
-      if (attempt > 1) {
-        console.log(`[${trackingNumber}] Retry attempt ${attempt}/${maxAttempts}...`);
-        // Exponential backoff: 1s, 2s, 4s, 8s (with random 1-3s added)
-        const exponentialDelay = Math.pow(2, attempt - 2) * 1000; // 1s, 2s, 4s, 8s
-        const randomDelay = 1000 + Math.floor(Math.random() * 2000); // 1-3 seconds
-        const totalDelay = exponentialDelay + randomDelay;
-        console.log(`[${trackingNumber}] Exponential backoff: waiting ${totalDelay}ms (${exponentialDelay}ms base + ${randomDelay}ms random)`);
-        await new Promise(resolve => setTimeout(resolve, totalDelay));
-      }
-      
-      // Try each URL format sequentially (not in parallel) to avoid concurrency limit
-      for (let urlIndex = 0; urlIndex < urlFormats.length; urlIndex++) {
-        const trackingUrl = urlFormats[urlIndex];
-        
-        // Add random delay between URL attempts to avoid hitting concurrency limit (free plan = 1 concurrent request)
-        if (urlIndex > 0) {
-          const randomDelay = 1000 + Math.floor(Math.random() * 2000); // 1-3 seconds
-          console.log(`[${trackingNumber}] Waiting ${randomDelay}ms before trying next URL (to avoid concurrency limit)...`);
-          await new Promise(resolve => setTimeout(resolve, randomDelay));
-        }
-        
-        if (foundContent) break; // Skip if we already found content
-        try {
-          console.log(`[${trackingNumber}] Trying URL: ${trackingUrl}`);
-          
-          // Ensure URL is properly encoded - use encodeURIComponent for query params
-          let encodedUrl = trackingUrl;
-          if (trackingUrl.includes('?')) {
-            const [base, query] = trackingUrl.split('?');
-            const encodedQuery = query.split('&').map(param => {
-              const [key, value] = param.split('=');
-              return `${key}=${encodeURIComponent(value)}`;
-            }).join('&');
-            encodedUrl = `${base}?${encodedQuery}`;
-          } else {
-            encodedUrl = encodeURI(trackingUrl);
-          }
-          
-          // ScrapingAnt API: https://api.scrapingant.com/v2/general
-          // Uses x-api-key in headers (not query parameter)
-          // browser=true enables JavaScript rendering
-          // js_snippet parameter executes JavaScript (base64 encoded)
-          const isHashBased = trackingUrl.includes('#/tracking-results/');
-          
-          // JavaScript to handle cookie modal and page reload
-          // ScrapingAnt's js_snippet requires base64 encoding
-          // Use page reload after 5 seconds to bypass persistent cookie modals
-          // This refreshes the page which often bypasses cookie modals
-          const jsCode = `
-            setTimeout(() => {
-              // Try to accept cookies first
-              const selectors = [
-                '[data-accept-cookies]',
-                '.cookie-accept',
-                '#accept-cookies',
-                'button[class*="cookie"]',
-                'button[class*="accept"]'
-              ];
-              for(let selector of selectors) {
-                const btn = document.querySelector(selector);
-                if(btn) {
-                  btn.click();
-                  break;
-                }
-              }
-              // Reload page after 5 seconds to bypass persistent cookie modals
-              setTimeout(() => {
-                window.location.reload();
-              }, 5000);
-            }, 3000);
-          `.trim();
-          
-          // Base64 encode the JavaScript snippet
-          const jsSnippetBase64 = Buffer.from(jsCode).toString('base64');
-          
-          // Build params object (API key goes in headers, not params)
-          const params: any = {
-            url: encodedUrl,
-            browser: 'true',
-            wait: '30000', // 30 seconds: 3s initial + 5s reload + 22s for content to load after reload
-            proxy_country: 'GB',
-          };
-          
-          // Use cookies from Step 1 if we have them (bypasses cookie modal completely)
-          if (cookies) {
-            // URL-encode cookies parameter properly
-            params.cookies = encodeURIComponent(cookies); // Format: cookie_name_1=cookie_value_1;cookie_name_2=cookie_value_2
-            console.log(`[${trackingNumber}] Using cookies from main page (should bypass cookie modal)`);
-          } else {
-            // Fallback: use js_snippet to accept cookies if we don't have them
-            params.js_snippet = jsSnippetBase64;
-            console.log(`[${trackingNumber}] Using js_snippet to accept cookies (no cookies available)`);
-          }
-          
-          // Removed wait_for_selector - using page reload in js_snippet instead
-          // The reload approach bypasses persistent cookie modals better
-          
-          const response = await axios.get('https://api.scrapingant.com/v2/general', {
-            params,
+      try {
+        console.log(`[${trackingNumber}] Creating tracking in TrackingMore...`);
+        await axios.post(
+          `${TRACKINGMORE_API_BASE}/trackings/post`,
+          {
+            tracking_number: cleanTrackingNumber,
+            carrier_code: carrierCode,
+          },
+          {
             headers: {
-              'x-api-key': SCRAPINGANT_API_KEY, // API key in header, not query parameter
+              'Tracking-Api-Key': TRACKINGMORE_API_KEY,
+              'Content-Type': 'application/json',
             },
-            timeout: 60000, // 60 seconds timeout
-          });
-          
-          // ScrapingAnt returns JSON with 'content' field containing HTML
-          html = response.data?.content || response.data || '';
-          if (typeof html !== 'string') {
-            html = JSON.stringify(html);
+            timeout: 30000,
           }
-          console.log(`[${trackingNumber}] Received HTML (attempt ${attempt}), length: ${html.length} bytes`);
-          
-          // Extract text from HTML (remove scripts, styles, tags)
-          const fullTextSample = html
-            .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-            .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-            .replace(/<[^>]+>/g, ' ')
-            .replace(/\s+/g, ' ')
-            .toLowerCase();
-          
-          // Get a sample for logging (first 1000 chars)
-          const textSampleForLog = fullTextSample.substring(0, 1000);
-          console.log(`[${trackingNumber}] Text sample (first 1000 chars): ${textSampleForLog}`);
-          
-          // Check for actual tracking results (not search form) - check FULL HTML, not just sample
-          // Make keywords more flexible (removed colons, added variations)
-          const hasTrackingResults = (
-            (fullTextSample.includes('tracking number') && fullTextSample.includes('service used')) ||
-            fullTextSample.includes('we\'ve got it') || 
-            fullTextSample.includes('we have your item') ||
-            fullTextSample.includes('expect to deliver') ||
-            fullTextSample.includes('on its way') ||
-            (fullTextSample.includes('delivered') && fullTextSample.includes('tracking number')) ||
-            (fullTextSample.includes('your item was delivered') && fullTextSample.includes('tracking number')) ||
-            fullTextSample.includes('tracking information') ||
-            fullTextSample.includes('item status') ||
-            fullTextSample.includes('mailpiece') ||
-            fullTextSample.includes('parcel status')
-          );
-          
-          // Check that it's NOT the search form (search form has "your reference number" but no actual tracking data)
-          const isSearchForm = (fullTextSample.includes('your reference number') || 
-                              fullTextSample.includes('enter your tracking number')) && 
-                              !fullTextSample.includes('tracking number') &&
-                              !fullTextSample.includes('we\'ve got it') &&
-                              !fullTextSample.includes('delivered') &&
-                              !fullTextSample.includes('service used') &&
-                              !fullTextSample.includes('item status');
-          
-          // Enhanced debug logging
-          console.log(`[${trackingNumber}] Content detection results:`);
-          console.log(`[${trackingNumber}] - Has tracking results: ${hasTrackingResults}`);
-          console.log(`[${trackingNumber}] - Is search form: ${isSearchForm}`);
-          console.log(`[${trackingNumber}] - Full text length: ${fullTextSample.length} chars`);
-          
-          if (hasTrackingResults && !isSearchForm) {
-            console.log(`[${trackingNumber}] ✅ Tracking content detected on attempt ${attempt} with URL: ${trackingUrl}`);
-            foundContent = true;
-            break outerLoop; // Got good content, stop retrying
-          } else {
-            if (isSearchForm) {
-              console.log(`[${trackingNumber}] ❌ Search form detected with URL: ${trackingUrl}, trying next URL format...`);
-            } else {
-              console.log(`[${trackingNumber}] ❌ No tracking content detected with URL: ${trackingUrl}, trying next URL format...`);
-            }
-            // Continue to next URL format
-          }
-        } catch (requestError) {
-          // Handle different error types
-          if (axios.isAxiosError(requestError)) {
-            const status = requestError.response?.status;
-            const statusText = requestError.response?.statusText;
-            
-            if (status === 401) {
-              // 401 Unauthorized - Royal Mail is blocking ScrapingAnt
-              console.warn(`[${trackingNumber}] ⚠️ ScrapingAnt returned 401 (Unauthorized) with URL: ${trackingUrl}`);
-              console.warn(`[${trackingNumber}] This likely means Royal Mail is blocking ScrapingAnt's requests`);
-              // Wait before trying next URL to avoid concurrency limit (random 1-3 seconds)
-              const randomDelay = 1000 + Math.floor(Math.random() * 2000);
-              await new Promise(resolve => setTimeout(resolve, randomDelay));
-              continue;
-            } else if (status === 403) {
-              // 403 Forbidden - Similar to 401, blocked access
-              console.warn(`[${trackingNumber}] ⚠️ ScrapingAnt returned 403 (Forbidden) with URL: ${trackingUrl}`);
-              const randomDelay = 1000 + Math.floor(Math.random() * 2000);
-              await new Promise(resolve => setTimeout(resolve, randomDelay));
-              continue;
-            } else if (status === 409) {
-              // 409 Conflict - Free plan concurrency limit reached (only 1 request at a time)
-              console.warn(`[${trackingNumber}] ⚠️ ScrapingAnt returned 409 (Concurrency limit) with URL: ${trackingUrl}`);
-              // Wait 30-60 seconds (random) before retrying to avoid concurrency limit
-              const delay = 30000 + Math.floor(Math.random() * 30000); // 30-60 seconds
-              console.warn(`[${trackingNumber}] Free plan allows only 1 concurrent request. Waiting ${delay}ms (${Math.round(delay/1000)}s) before next attempt...`);
-              await new Promise(resolve => setTimeout(resolve, delay));
-              // Break out of URL loop and retry the whole attempt
-              break;
-            } else if (status === 503) {
-              // 503 Service Unavailable (ScrapingAnt infrastructure issue)
-              console.warn(`[${trackingNumber}] ⚠️ ScrapingAnt returned 503 (Service Unavailable) with URL: ${trackingUrl}`);
-              const randomDelay = 1000 + Math.floor(Math.random() * 2000);
-              await new Promise(resolve => setTimeout(resolve, randomDelay));
-              // Try next URL format on 503
-              continue;
-            } else if (requestError.code === 'ECONNABORTED') {
-              console.warn(`[${trackingNumber}] ⚠️ Request timed out with URL: ${trackingUrl}, trying next URL format...`);
-              // Try next URL format on timeout
-              continue;
-            } else {
-              // Other errors - log details and try next URL format
-              console.warn(`[${trackingNumber}] ⚠️ Error with URL ${trackingUrl}:`, 
-                status ? `${status} ${statusText}` : requestError.message);
-              if (requestError.response?.data) {
-                console.warn(`[${trackingNumber}] Response data:`, JSON.stringify(requestError.response.data).substring(0, 200));
-              }
-              continue;
-            }
-          } else {
-            // Non-Axios errors
-            console.warn(`[${trackingNumber}] ⚠️ Non-Axios error with URL ${trackingUrl}:`, 
-              requestError instanceof Error ? requestError.message : 'Unknown error');
-            continue;
-          }
+        );
+        console.log(`[${trackingNumber}] Tracking created/updated in TrackingMore`);
+      } catch (createError) {
+        // If tracking already exists (409), that's fine - continue to get tracking
+        if (axios.isAxiosError(createError) && createError.response?.status === 409) {
+          console.log(`[${trackingNumber}] Tracking already exists in TrackingMore`);
+        } else {
+          console.warn(`[${trackingNumber}] Failed to create tracking:`, 
+            axios.isAxiosError(createError) ? createError.message : 'Unknown error');
         }
       }
       
-      // If we've tried all URL formats and still no content, break to retry attempt
-      if (!foundContent && attempt === maxAttempts) {
-        console.warn(`[${trackingNumber}] Failed to get tracking content after ${maxAttempts} attempts with all URL formats`);
+      // Step 2: Get tracking information
+      console.log(`[${trackingNumber}] Getting tracking information from TrackingMore...`);
+      const getResponse = await axios.get(
+        `${TRACKINGMORE_API_BASE}/trackings/get`,
+        {
+          params: {
+            tracking_number: cleanTrackingNumber,
+            carrier_code: carrierCode,
+          },
+          headers: {
+            'Tracking-Api-Key': TRACKINGMORE_API_KEY,
+          },
+          timeout: 30000,
+        }
+      );
+      
+      if (getResponse.data) {
+        console.log(`[${trackingNumber}] Successfully fetched from TrackingMore`);
+        return parseTrackingMoreResponse(getResponse.data, trackingNumber);
       }
-    }
-    
-    // If we didn't get any content, return early
-    if (!foundContent || !html) {
-      console.warn(`[${trackingNumber}] No tracking content found after all attempts`);
+    } catch (trackingMoreError) {
+      console.error(`[${trackingNumber}] TrackingMore API error:`, 
+        axios.isAxiosError(trackingMoreError) 
+          ? `${trackingMoreError.response?.status} ${trackingMoreError.response?.statusText}: ${JSON.stringify(trackingMoreError.response?.data)}`
+          : 'Unknown error');
+      
+      // Return not_scanned if TrackingMore fails
       return {
         status: 'not_scanned',
-        details: 'Unable to fetch tracking information from Royal Mail',
-      };
-    }
-
-    // Try to extract just the main tracking content (skip header, footer, cookie banners)
-    // Look for the main content area in Royal Mail's page
-    let mainContent = '';
-    const mainMatch = html.match(/<main[^>]*>([\s\S]*?)<\/main>/i);
-    const roleMainMatch = html.match(/<[^>]*role=["']main["'][^>]*>([\s\S]*?)<\/[^>]+>/i);
-    
-    const contentHtml = mainMatch?.[1] || roleMainMatch?.[1] || html;
-    
-    // Extract text content from HTML
-    const textContent = contentHtml
-      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '') // Remove scripts
-      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '') // Remove styles
-      .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '') // Remove header
-      .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '') // Remove footer
-      .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '') // Remove navigation
-      .replace(/<[^>]+>/g, ' ') // Remove all remaining tags
-      .replace(/\s+/g, ' ') // Collapse whitespace
-      .replace(/Your privacy and our use of cookies.*?Continue/gi, '') // Remove cookie banner
-      .replace(/This site uses JavaScript.*?enabled/gi, '') // Remove JS warning
-      .trim();
-
-    console.log(`[${trackingNumber}] Extracted text, length: ${textContent.length} chars`);
-    console.log(`[${trackingNumber}] First 500 chars: ${textContent.substring(0, 500)}`);
-    
-    // Also log if we found key tracking phrases
-    const hasTrackingContent = textContent.toLowerCase().includes('we\'ve got it') || 
-                                textContent.toLowerCase().includes('expect to deliver') ||
-                                textContent.toLowerCase().includes('tracking number:');
-    console.log(`[${trackingNumber}] Has tracking content: ${hasTrackingContent}`);
-
-    // Extract status header from HTML
-    // Royal Mail uses various heading structures, so try multiple approaches
-    let statusHeader = '';
-    
-    // Try to find headings with regex (allows for nested tags)
-    const h1Match = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
-    const h2Match = html.match(/<h2[^>]*>([\s\S]*?)<\/h2>/i);
-    const h3Match = html.match(/<h3[^>]*>([\s\S]*?)<\/h3>/i);
-    
-    const headingMatch = h1Match || h2Match || h3Match;
-    if (headingMatch && headingMatch[1]) {
-      statusHeader = headingMatch[1]
-        .replace(/<[^>]+>/g, '') // Remove any nested tags
-        .replace(/&nbsp;/g, ' ')
-        .replace(/&amp;/g, '&')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&quot;/g, '"')
-        .replace(/\s+/g, ' ') // Collapse whitespace
-        .trim();
-      
-      // Filter out generic headings
-      if (statusHeader.length < 100 && 
-          !statusHeader.toLowerCase().includes('royal mail') &&
-          !statusHeader.toLowerCase().includes('track your item') &&
-          statusHeader.length > 0) {
-        console.log(`[${trackingNumber}] Extracted status header: "${statusHeader}"`);
-      } else {
-        statusHeader = '';
-      }
-    }
-    
-    // If no heading found, try to extract from the text content
-    if (!statusHeader) {
-      // Look for common status phrases in the beginning of the text
-      const textStart = textContent.substring(0, 200);
-      if (textStart.includes('We\'ve got it')) {
-        statusHeader = 'We\'ve got it';
-        console.log(`[${trackingNumber}] Extracted status header from text: "${statusHeader}"`);
-      } else if (textStart.includes('Item delivered')) {
-        statusHeader = 'Item delivered';
-        console.log(`[${trackingNumber}] Extracted status header from text: "${statusHeader}"`);
-      } else if (textStart.includes('On its way')) {
-        statusHeader = 'On its way';
-        console.log(`[${trackingNumber}] Extracted status header from text: "${statusHeader}"`);
-      }
-    }
-
-    const textLower = textContent.toLowerCase();
-
-    // Check for Access Denied or errors
-    if (textLower.includes('access denied') || textLower.includes('you don\'t have permission')) {
-      console.log(`[${trackingNumber}] Access Denied`);
-      return { 
-        status: 'not_scanned', 
-        details: 'Access Denied by Royal Mail',
-        statusHeader: statusHeader || undefined
-      };
-    }
-
-    // PRIORITY 0: Check for future delivery phrases (should be SCANNED, not DELIVERED)
-    const futureDeliveryPhrases = [
-      'expect to deliver',
-      'will deliver',
-      'to be delivered',
-      'expected delivery',
-      'delivery expected',
-      'we expect to deliver',
-      'on its way',
-      'it\'s on its way',
-      'we have your item',
-      'at london central',
-      'at delivery office',
-      'by 7:30pm',
-      'have your item at',
-    ];
-
-    for (const phrase of futureDeliveryPhrases) {
-      if (textLower.includes(phrase)) {
-        console.log(`[${trackingNumber}] Detected SCANNED status (has future delivery indicator: ${phrase})`);
-        return { 
-          status: 'scanned', 
-          details: textContent.substring(0, 500),
-          statusHeader: statusHeader || undefined
-        };
-      }
-    }
-
-    // PRIORITY 1: Check for DELIVERED status (VERY STRICT - only past tense AND must have tracking content)
-    // Check for delivered status FIRST before validation (delivered pages might be shorter)
-    const deliveredPhrases = [
-      'your item was delivered',
-      'has been delivered',
-      'was delivered',
-      'successfully delivered',
-      'item delivered to',
-      'delivered and signed',
-      'signed for and delivered',
-      'delivery completed',
-      'delivery successful',
-    ];
-    
-    // Check if this is a delivered status page
-    const hasDeliveredIndicator = deliveredPhrases.some(phrase => textLower.includes(phrase)) ||
-                                   textLower.includes('delivered') && textLower.includes('tracking number:');
-    
-    // Validation: Do we have actual tracking content?
-    // Real tracking pages have "Tracking number:" label (either delivered or in-transit)
-    // Search form does NOT have this
-    const hasTrackingNumberLabel = textLower.includes('tracking number:');
-    const hasServiceUsedLabel = textLower.includes('service used:');
-    
-    // If we have these labels, it's definitely tracking content regardless of length
-    if (hasTrackingNumberLabel && hasServiceUsedLabel) {
-      console.log(`[${trackingNumber}] Validated: Has tracking labels (length: ${textContent.length})`);
-      // Continue to status detection
-    } else if (textContent.length < 700) {
-      // Short content without tracking labels = search form or error
-      console.log(`[${trackingNumber}] No actual tracking content found (length: ${textContent.length}, no tracking labels), defaulting to NOT_SCANNED`);
-      return { 
-        status: 'not_scanned', 
-        details: 'No tracking information loaded from Royal Mail',
-        statusHeader: statusHeader || undefined
-      };
-    } else if (!textLower.includes('we\'ve got it') && 
-               !textLower.includes('expect to deliver') &&
-               !textLower.includes('delivered') &&
-               !textLower.includes('on its way')) {
-      // Medium length but no tracking-related keywords = likely search form
-      console.log(`[${trackingNumber}] No tracking keywords found despite length ${textContent.length}, defaulting to NOT_SCANNED`);
-      return { 
-        status: 'not_scanned', 
-        details: 'No tracking information loaded from Royal Mail',
-        statusHeader: statusHeader || undefined
+        details: `TrackingMore API error: ${axios.isAxiosError(trackingMoreError) ? trackingMoreError.message : 'Unknown error'}`,
       };
     }
     
-    console.log(`[${trackingNumber}] Validation passed, proceeding with status detection...`);
-
-    const deliveredRegex = /\b(has been delivered|was delivered|delivery completed)\b/i;
-    const hasDeliveredKeyword = deliveredRegex.test(textLower);
-    
-    let hasDeliveredPhrase = false;
-    for (const phrase of deliveredPhrases) {
-      if (textLower.includes(phrase)) {
-        hasDeliveredPhrase = true;
-        break;
-      }
-    }
-
-    // Check for future indicators that would override "delivered" detection
-    const hasNoFutureWords = !textLower.includes('expect') && 
-                             !textLower.includes('will deliver') && 
-                             !textLower.includes('to be delivered');
-
-    if ((hasDeliveredPhrase || hasDeliveredKeyword) && hasNoFutureWords) {
-      console.log(`[${trackingNumber}] Detected DELIVERED status`);
-      return { 
-        status: 'delivered', 
-        details: textContent.substring(0, 500),
-        statusHeader: statusHeader || undefined
-      };
-    }
-
-    // PRIORITY 2: Check for NOT_SCANNED status
-    const notScannedKeywords = [
-      'not found',
-      'no tracking information',
-      'unable to find',
-      'please check the tracking number',
-      'invalid tracking number',
-      'tracking number not recognised',
-      'no information available',
-      'we cannot find',
-    ];
-
-    for (const keyword of notScannedKeywords) {
-      if (textLower.includes(keyword)) {
-        console.log(`[${trackingNumber}] Detected NOT_SCANNED status (keyword: ${keyword})`);
-        return { 
-          status: 'not_scanned', 
-          details: textContent.substring(0, 500) || 'No tracking information available',
-          statusHeader: statusHeader || undefined
-        };
-      }
-    }
-
-    // PRIORITY 3: Check for SCANNED status
-    const scannedKeywords = [
-      'in transit',
-      'out for delivery',
-      'at delivery office',
-      'on its way',
-      'it\'s on its way',
-      'collected',
-      'accepted',
-      'processed',
-      'dispatched',
-      'in the post',
-      'tracking information',
-      'item received',
-      'received at',
-      'arrived at',
-      'sorted',
-      'ready for delivery',
-      'we have your item',
-      'we\'ve got it',
-    ];
-
-    let hasScannedIndicator = false;
-    for (const keyword of scannedKeywords) {
-      if (textLower.includes(keyword)) {
-        hasScannedIndicator = true;
-        console.log(`[${trackingNumber}] Detected SCANNED status (keyword: ${keyword})`);
-        break;
-      }
-    }
-
-    if (hasScannedIndicator && textContent.length > 50) {
-      return { 
-        status: 'scanned', 
-        details: textContent.substring(0, 500),
-        statusHeader: statusHeader || undefined
-      };
-    }
-
-    // Check if we have substantial content with dates/times
-    if (textContent.length > 100 && textLower.includes('tracking')) {
-      const hasDateOrTime = /\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{1,2}:\d{2}/.test(textContent);
-      if (hasDateOrTime) {
-        console.log(`[${trackingNumber}] Detected SCANNED status (has tracking info with dates)`);
-        return { 
-          status: 'scanned', 
-          details: textContent.substring(0, 500),
-          statusHeader: statusHeader || undefined
-        };
-      }
-    }
-
-    // Default: not_scanned
-    console.log(`[${trackingNumber}] Unable to determine status, defaulting to NOT_SCANNED`);
-    return { 
-      status: 'not_scanned', 
-      details: textContent.substring(0, 500) || 'Unable to determine status from page content',
-      statusHeader: statusHeader || undefined
+    // If we reach here, both methods failed
+    return {
+      status: 'not_scanned',
+      details: 'Unable to fetch tracking information',
     };
     
   } catch (error) {
@@ -686,17 +277,16 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
     if (axios.isAxiosError(error)) {
       if (error.response) {
         // Server responded with error status
-        console.error(`ScrapingBee API error: ${error.response.status} ${error.response.statusText}`);
+        console.error(`TrackingMore API error: ${error.response.status} ${error.response.statusText}`);
         console.error(`Response data:`, JSON.stringify(error.response.data, null, 2));
         console.error(`Response headers:`, error.response.headers);
       } else if (error.request) {
         // Request was made but no response received (timeout, network error, etc.)
-        console.error(`ScrapingBee request failed - no response received`);
+        console.error(`TrackingMore request failed - no response received`);
         console.error(`Request config:`, {
           url: error.config?.url,
           method: error.config?.method,
           timeout: error.config?.timeout,
-          params: error.config?.params
         });
         if (error.code === 'ECONNABORTED') {
           console.error(`Request timed out after ${error.config?.timeout}ms`);
@@ -705,7 +295,7 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
         }
       } else {
         // Error setting up the request
-        console.error(`Error setting up ScrapingBee request:`, error.message);
+        console.error(`Error setting up TrackingMore request:`, error.message);
       }
     } else {
       console.error(`Non-Axios error:`, error);
@@ -717,9 +307,7 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
   }
 }
 
-// No need for browser cleanup with ScrapingAnt
+// No need for browser cleanup with TrackingMore
 export async function closeBrowser(): Promise<void> {
-  // No-op - ScrapingAnt is API-based
+  // No-op - TrackingMore is API-based
 }
-
-

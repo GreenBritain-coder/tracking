@@ -20,7 +20,7 @@ A web application for tracking Royal Mail packages with automatic status updates
 - **Backend**: Node.js with Express and TypeScript
 - **Frontend**: React with TypeScript
 - **Database**: PostgreSQL
-- **Web Scraping**: Puppeteer
+- **Tracking API**: TrackingMore API for Royal Mail package tracking
 - **Scheduling**: node-cron for 5-minute intervals
 - **Authentication**: JWT tokens with bcrypt for passwords
 - **Deployment**: Docker containers for Coolify hosting
@@ -46,6 +46,7 @@ cd "Tracking Site"
 ```env
 DATABASE_URL=postgresql://user:password@localhost:5432/rm_tracking
 JWT_SECRET=your-secret-key-here-change-in-production
+TRACKINGMORE_API_KEY=your-trackingmore-api-key-here
 PORT=3000
 NODE_ENV=development
 ```
@@ -102,6 +103,7 @@ POSTGRES_USER=postgres
 POSTGRES_PASSWORD=your-secure-password
 POSTGRES_DB=rm_tracking
 JWT_SECRET=your-secret-key-here
+TRACKINGMORE_API_KEY=your-trackingmore-api-key-here
 ```
 
 2. Build and start services:
@@ -122,6 +124,7 @@ docker-compose exec backend npm run migrate
    - Environment variables:
      - `DATABASE_URL`: Your PostgreSQL connection string
      - `JWT_SECRET`: Secret for JWT tokens
+     - `TRACKINGMORE_API_KEY`: Your TrackingMore API key (get from https://admin.trackingmore.com/developer/apikey)
      - `NODE_ENV`: `production`
      - `PORT`: `3000`
 
@@ -208,7 +211,7 @@ All endpoints except `/api/auth/*` require authentication via Bearer token.
 
 ## Notes
 
-- The Royal Mail scraper uses Puppeteer to navigate and parse tracking pages. The status mapping may need adjustment based on actual Royal Mail page structure.
+- The Royal Mail tracking uses TrackingMore API for reliable package tracking. Get your API key from https://admin.trackingmore.com/developer/apikey
 - The scheduler runs every 5 minutes and processes tracking numbers in batches to avoid rate limiting.
 - All status changes are logged in the `status_history` table for analytics.
 - The application automatically creates initial status history entries when tracking numbers are added.
