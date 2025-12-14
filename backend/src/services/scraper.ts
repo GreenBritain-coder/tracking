@@ -149,138 +149,32 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
             encodedUrl = encodeURI(trackingUrl);
           }
           
-          // Use JavaScript to accept cookies and wait for content to load
-          // Handle both hash-based routing and query parameter formats
-          const isHashBased = trackingUrl.includes('#/tracking-results/');
-          const jsSnippet = `
-            (async function() {
-              // Aggressively accept cookies - try multiple methods
-              let cookieAccepted = false;
-              
-              // Method 1: Set cookie directly (if possible)
-              try {
-                document.cookie = 'cookieConsent=accepted; path=/; domain=.royalmail.com; max-age=31536000';
-                document.cookie = 'cookieConsent=accepted; path=/; domain=www.royalmail.com; max-age=31536000';
-              } catch(e) {}
-              
-              // Method 2: Find and click accept button - try all possible selectors
-              const selectors = [
-                'button[class*="accept"]',
-                'button[class*="cookie"]',
-                'a[class*="accept"]',
-                'a[class*="cookie"]',
-                '[id*="accept"]',
-                '[id*="cookie"]',
-                'button:contains("Accept")',
-                'button:contains("Continue")',
-                'a:contains("Accept")',
-                'a:contains("Continue")'
-              ];
-              
-              // Try all buttons/links on the page
-              const allClickable = Array.from(document.querySelectorAll('button, a, [role="button"], [onclick]'));
-              for (const element of allClickable) {
-                try {
-                  const text = (element.textContent || element.innerText || element.getAttribute('aria-label') || '').toLowerCase().trim();
-                  const id = (element.id || '').toLowerCase();
-                  const className = (element.className || '').toLowerCase();
-                  
-                  // Check if this looks like an accept button
-                  if ((text.includes('accept') || text.includes('continue') || text === 'ok' || text === 'yes') &&
-                      (text.includes('cookie') || text.includes('privacy') || text.length < 30 || 
-                       id.includes('accept') || id.includes('cookie') ||
-                       className.includes('accept') || className.includes('cookie'))) {
-                    element.click();
-                    cookieAccepted = true;
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    break;
-                  }
-                } catch(e) {}
-              }
-              
-              // Method 3: Try to find cookie banner and click first button
-              if (!cookieAccepted) {
-                try {
-                  const banners = document.querySelectorAll('[id*="cookie"], [class*="cookie"], [id*="privacy"], [class*="privacy"], [id*="consent"], [class*="consent"]');
-                  for (const banner of banners) {
-                    const btn = banner.querySelector('button, a, [role="button"]');
-                    if (btn) {
-                      btn.click();
-                      cookieAccepted = true;
-                      await new Promise(resolve => setTimeout(resolve, 1000));
-                      break;
-                    }
-                  }
-                } catch(e) {}
-              }
-              
-              // Wait after accepting cookies to let them take effect
-              if (cookieAccepted) {
-                await new Promise(resolve => setTimeout(resolve, 3000));
-              }
-              
-              // For hash-based URLs, navigate to hash and wait
-              if (${isHashBased ? 'true' : 'false'}) {
-                window.location.hash = '#/tracking-results/${cleanTrackingNumber}';
-                await new Promise(resolve => setTimeout(resolve, 4000));
-              }
-              
-              // For query parameter URLs, ensure the page processes the query param
-              // Sometimes Royal Mail needs a moment to process the query parameter
-              if (!${isHashBased ? 'true' : 'false'}) {
-                // Check if we're on the right page with query param
-                if (window.location.search.includes('trackNumber')) {
-                  // Wait a bit for query param to be processed
-                  await new Promise(resolve => setTimeout(resolve, 2000));
-                }
-              }
-              
-              // Wait for tracking content to load
-              const trackingNumber = '${cleanTrackingNumber}';
-              let attempts = 0;
-              const maxAttempts = 30; // 15 seconds max (30 * 500ms)
-              
-              while (attempts < maxAttempts) {
-                const text = (document.body.innerText || document.body.textContent || '').toLowerCase();
-                const hasTrackingContent = text.includes('tracking number') || 
-                                        text.includes('service used') ||
-                                        text.includes('delivered') ||
-                                        text.includes("we've got it") ||
-                                        text.includes('expect to deliver') ||
-                                        text.includes('on its way') ||
-                                        text.includes(trackingNumber.toLowerCase());
-                
-                // Make sure it's not just the search form
-                const isSearchForm = text.includes('your reference number') && 
-                                   !text.includes('tracking number') &&
-                                   !text.includes('service used');
-                
-                if (hasTrackingContent && !isSearchForm) {
-                  return true; // Tracking content loaded
-                }
-                
-                await new Promise(resolve => setTimeout(resolve, 500));
-                attempts++;
-              }
-              
-              return false; // Timeout
-            })();
-          `.trim();
+          // Simplified approach: Just wait for content to load
+          // One tracking number worked, so Royal Mail can process query params naturally
+          // Don't try to manipulate cookies - let ScrapingBee and Royal Mail handle it
+          const jsSnippet = null; // No JavaScript manipulation - keep it simple
+          
+          const params: any = {
+            api_key: SCRAPINGBEE_API_KEY,
+            url: encodedUrl, // Direct URL with properly encoded query parameter
+            render_js: 'true', // Enable JavaScript rendering for dynamic content
+            wait: '20000', // 20 second wait - give Royal Mail plenty of time
+            premium_proxy: 'true', // Use premium proxies for better success rate
+            block_resources: 'false', // Don't block any resources
+            window_width: '1920',
+            window_height: '1080',
+            country_code: 'GB', // UK geolocation
+            session_id: `rm-${cleanTrackingNumber}`, // Use session to maintain cookies across requests
+          };
+          
+          // Don't add js_snippet if it's null (simplified approach)
+          if (jsSnippet) {
+            params.js_snippet = Buffer.from(jsSnippet).toString('base64');
+          }
           
           const response = await axios.get('https://app.scrapingbee.com/api/v1/', {
-            params: {
-              api_key: SCRAPINGBEE_API_KEY,
-              url: encodedUrl, // Direct URL with properly encoded query parameter
-              render_js: 'true', // Enable JavaScript rendering for dynamic content
-              js_snippet: Buffer.from(jsSnippet).toString('base64'), // Accept cookies and wait for content
-              wait: '15000', // 15 second wait (2s for cookies + 10s for content + 3s buffer)
-              premium_proxy: 'true', // Use premium proxies for better success rate
-              block_resources: 'false', // Don't block any resources (as ScrapingBee suggests)
-              window_width: '1920',
-              window_height: '1080',
-              country_code: 'GB', // UK geolocation
-            },
-            timeout: 40000, // 40 second timeout (increased from 35s)
+            params,
+            timeout: 45000, // 45 second timeout
           });
           
           html = response.data;
