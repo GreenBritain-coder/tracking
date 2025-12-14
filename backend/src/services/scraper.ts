@@ -203,7 +203,19 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
           );
           console.log(`[${trackingNumber}] POST response status: ${createResponse.status}`);
           console.log(`[${trackingNumber}] POST response body:`, JSON.stringify(createResponse.data, null, 2).substring(0, 1000));
-          console.log(`[${trackingNumber}] Tracking created/updated in TrackingMore with courier code: ${code}`);
+          
+          // Check if tracking was actually created (201 Created) vs just accepted (200 OK)
+          if (createResponse.status === 201) {
+            console.log(`[${trackingNumber}] Tracking successfully CREATED (201) in TrackingMore with courier code: ${code}`);
+          } else if (createResponse.status === 200) {
+            // 200 with empty data might mean request accepted but tracking not created
+            if (!createResponse.data?.data || 
+                (Array.isArray(createResponse.data.data) && createResponse.data.data.length === 0)) {
+              console.warn(`[${trackingNumber}] POST returned 200 with empty data - tracking may not have been created in TrackingMore`);
+            } else {
+              console.log(`[${trackingNumber}] Tracking created/updated (200) in TrackingMore with courier code: ${code}`);
+            }
+          }
           
           // Check if POST response contains actual tracking data (not just empty array)
           if (createResponse.data?.data) {
