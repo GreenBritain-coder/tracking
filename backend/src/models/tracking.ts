@@ -83,6 +83,11 @@ export async function getTrackingNumberById(id: number): Promise<TrackingNumber 
   return result.rows[0] || null;
 }
 
+export async function getTrackingNumberByTrackingNumber(trackingNumber: string): Promise<TrackingNumber | null> {
+  const result = await pool.query('SELECT * FROM tracking_numbers WHERE tracking_number = $1', [trackingNumber]);
+  return result.rows[0] || null;
+}
+
 export async function updateTrackingStatus(
   id: number,
   status: TrackingStatus,
