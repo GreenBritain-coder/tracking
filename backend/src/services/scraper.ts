@@ -236,60 +236,40 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
         console.log(`[${trackingNumber}] POST returned empty data, fetching tracking from TrackingMore...`);
       }
       
-      // Wait a moment for TrackingMore to process (if it was just created)
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Wait longer for TrackingMore to process the tracking (especially if it was just created)
+      await new Promise(resolve => setTimeout(resolve, 5000));
       
-      // Try to GET the tracking data using the courier code we found
-      // Use path-based format: /trackings/{courier_code}/{tracking_number}
-      try {
-        console.log(`[${trackingNumber}] Fetching tracking data from TrackingMore using courier code: ${courierCode}`);
-        const getResponse = await axios.get(
-          `${TRACKINGMORE_API_BASE}/trackings/${courierCode}/${cleanTrackingNumber}`,
-          {
-            headers: {
-              'Tracking-Api-Key': TRACKINGMORE_API_KEY,
-            },
-            timeout: 30000,
-          }
-        );
-        
-        if (getResponse.status === 200 && getResponse.data) {
-          console.log(`[${trackingNumber}] Successfully fetched tracking data from TrackingMore`);
-          return parseTrackingMoreResponse(getResponse.data, trackingNumber);
-        }
-      } catch (getError) {
-          // If path-based format fails, try query parameter format (without courier_code to avoid 400 errors)
-          if (axios.isAxiosError(getError) && getError.response?.status === 404) {
-            console.log(`[${trackingNumber}] Path-based GET failed (404), trying query parameter format...`);
-            try {
-              const getResponse2 = await axios.get(
-                `${TRACKINGMORE_API_BASE}/trackings/get`,
-                {
-                  params: {
-                    tracking_number: cleanTrackingNumber,
-                  },
-                  headers: {
-                    'Tracking-Api-Key': TRACKINGMORE_API_KEY,
-                  },
-                  timeout: 30000,
-                }
-              );
-              
-              if (getResponse2.status === 200 && getResponse2.data) {
-                console.log(`[${trackingNumber}] Successfully fetched tracking data using query parameters`);
-                return parseTrackingMoreResponse(getResponse2.data, trackingNumber);
-              }
-            } catch (getError2) {
-              // Log only if it's not a 404 (404 means tracking not found, which is expected for new trackings)
-              if (axios.isAxiosError(getError2) && getError2.response?.status !== 404) {
-                console.warn(`[${trackingNumber}] GET request failed:`, getError2.response?.status, getError2.response?.data);
-              } else {
-                console.log(`[${trackingNumber}] Tracking not yet available in TrackingMore (404)`);
-              }
+      // Try to GET the tracking data using path-based format: /trackings/{courier_code}/{tracking_number}
+      // Try both courier code formats
+      for (const code of courierCodes) {
+        try {
+          console.log(`[${trackingNumber}] Fetching tracking data from TrackingMore using courier code: ${code}`);
+          const getResponse = await axios.get(
+            `${TRACKINGMORE_API_BASE}/trackings/${code}/${cleanTrackingNumber}`,
+            {
+              headers: {
+                'Tracking-Api-Key': TRACKINGMORE_API_KEY,
+              },
+              timeout: 30000,
             }
-          } else if (axios.isAxiosError(getError) && getError.response?.status !== 404) {
-            console.warn(`[${trackingNumber}] GET request failed:`, getError.response?.status, getError.response?.data);
+          );
+          
+          if (getResponse.status === 200 && getResponse.data) {
+            console.log(`[${trackingNumber}] Successfully fetched tracking data from TrackingMore`);
+            return parseTrackingMoreResponse(getResponse.data, trackingNumber);
           }
+        } catch (getError) {
+          // 404 is expected if tracking not found yet, don't log as error
+          if (axios.isAxiosError(getError) && getError.response?.status === 404) {
+            console.log(`[${trackingNumber}] GET failed (404) with courier code ${code}, trying next...`);
+            continue; // Try next courier code
+          } else if (axios.isAxiosError(getError) && getError.response) {
+            // Log other errors but continue trying
+            console.warn(`[${trackingNumber}] GET failed (${getError.response.status}) with courier code ${code}:`, 
+              JSON.stringify(getError.response.data).substring(0, 200));
+            continue;
+          }
+        }
       }
       
       // If GET also fails or returns empty, tracking hasn't been scanned yet
