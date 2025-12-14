@@ -154,26 +154,19 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
           // Don't try to manipulate cookies - let ScrapingBee and Royal Mail handle it
           const jsSnippet = null; // No JavaScript manipulation - keep it simple
           
-          const params: any = {
-            api_key: SCRAPINGBEE_API_KEY,
-            url: encodedUrl, // Direct URL with properly encoded query parameter
-            render_js: 'true', // Enable JavaScript rendering for dynamic content
-            wait: '20000', // 20 second wait - give Royal Mail plenty of time
-            premium_proxy: 'true', // Use premium proxies for better success rate
-            block_resources: 'false', // Don't block any resources
-            window_width: '1920',
-            window_height: '1080',
-            country_code: 'GB', // UK geolocation
-            session_id: `rm-${cleanTrackingNumber}`, // Use session to maintain cookies across requests
-          };
-          
-          // Don't add js_snippet if it's null (simplified approach)
-          if (jsSnippet) {
-            params.js_snippet = Buffer.from(jsSnippet).toString('base64');
-          }
-          
+          // Simple, direct approach - just wait for Royal Mail to load
           const response = await axios.get('https://app.scrapingbee.com/api/v1/', {
-            params,
+            params: {
+              api_key: SCRAPINGBEE_API_KEY,
+              url: encodedUrl, // Direct URL with properly encoded query parameter
+              render_js: 'true', // Enable JavaScript rendering for dynamic content
+              wait: '20000', // 20 second wait - give Royal Mail plenty of time
+              premium_proxy: 'true', // Use premium proxies for better success rate
+              block_resources: 'false', // Don't block any resources
+              window_width: '1920',
+              window_height: '1080',
+              country_code: 'GB', // UK geolocation
+            },
             timeout: 45000, // 45 second timeout
           });
           
