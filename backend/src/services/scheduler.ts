@@ -14,11 +14,26 @@ export async function updateAllTrackingStatuses() {
   console.log('Starting scheduled tracking update...');
   
   try {
-    const trackingNumbers = await getAllTrackingNumbers();
-    console.log(`Checking ${trackingNumbers.length} tracking numbers...`);
+    const allTrackingNumbers = await getAllTrackingNumbers();
+    
+    // Filter out tracking numbers that are already marked as "delivered"
+    const trackingNumbers = allTrackingNumbers.filter(tn => tn.current_status !== 'delivered');
+    const skippedCount = allTrackingNumbers.length - trackingNumbers.length;
+    
+    if (skippedCount > 0) {
+      console.log(`Skipping ${skippedCount} tracking number(s) already marked as delivered`);
+    }
+    console.log(`Checking ${trackingNumbers.length} tracking number(s)...`);
     
     let updated = 0;
     let errors = 0;
+    
+    // If no tracking numbers to check, exit early
+    if (trackingNumbers.length === 0) {
+      console.log('No tracking numbers to check (all are delivered or none exist)');
+      isRunning = false;
+      return;
+    }
     
     // Process in batches to avoid overwhelming the scraper
     const batchSize = 5;
@@ -57,7 +72,7 @@ export async function updateAllTrackingStatuses() {
     }
     
     console.log(
-      `Update complete. Updated: ${updated}, Errors: ${errors}, Total: ${trackingNumbers.length}`
+      `Update complete. Updated: ${updated}, Errors: ${errors}, Checked: ${trackingNumbers.length}, Skipped (delivered): ${skippedCount}, Total: ${allTrackingNumbers.length}`
     );
   } catch (error) {
     console.error('Error in scheduled update:', error);
