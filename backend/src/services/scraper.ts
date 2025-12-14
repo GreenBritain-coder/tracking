@@ -208,11 +208,13 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
           // js_snippet parameter executes JavaScript (base64 encoded)
           const isHashBased = trackingUrl.includes('#/tracking-results/');
           
-          // JavaScript to accept cookie modal and navigate to tracking results
+          // JavaScript to handle cookie modal and page reload
           // ScrapingAnt's js_snippet requires base64 encoding
-          // Use setTimeout with 3s delay and try multiple Royal Mail-specific selectors
+          // Use page reload after 5 seconds to bypass persistent cookie modals
+          // This refreshes the page which often bypasses cookie modals
           const jsCode = `
             setTimeout(() => {
+              // Try to accept cookies first
               const selectors = [
                 '[data-accept-cookies]',
                 '.cookie-accept',
@@ -227,7 +229,10 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
                   break;
                 }
               }
-              ${isHashBased ? `setTimeout(() => { window.location.hash = '#/tracking-results/${cleanTrackingNumber}'; }, 1000);` : ''}
+              // Reload page after 5 seconds to bypass persistent cookie modals
+              setTimeout(() => {
+                window.location.reload();
+              }, 5000);
             }, 3000);
           `.trim();
           
@@ -238,7 +243,7 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
           const params: any = {
             url: encodedUrl,
             browser: 'true',
-            wait: '20000', // 20 seconds for content to load
+            wait: '30000', // 30 seconds: 3s initial + 5s reload + 22s for content to load after reload
             proxy_country: 'GB',
           };
           
@@ -253,12 +258,8 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
             console.log(`[${trackingNumber}] Using js_snippet to accept cookies (no cookies available)`);
           }
           
-          // Wait for tracking content to appear after JavaScript runs
-          // This makes ScrapingAnt wait for the tracking content to load before returning HTML
-          // Try the most common Royal Mail tracking selectors
-          params.wait_for_selector = '.tracking-results'; // Primary selector
-          // Alternative: '[data-tracking-info]' if .tracking-results doesn't work
-          console.log(`[${trackingNumber}] Waiting for tracking content selector: ${params.wait_for_selector}`);
+          // Removed wait_for_selector - using page reload in js_snippet instead
+          // The reload approach bypasses persistent cookie modals better
           
           const response = await axios.get('https://api.scrapingant.com/v2/general', {
             params,
