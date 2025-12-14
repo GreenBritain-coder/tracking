@@ -108,13 +108,13 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
     // Clean tracking number (remove spaces) for URL
     const cleanTrackingNumber = trackingNumber.replace(/\s+/g, '');
     
-    // Try multiple URL formats - Royal Mail supports both query parameter and hash-based routing
-    // Hash-based worked for one tracking number, so try that first
+    // Try multiple URL formats - Query parameter format worked for one tracking number
+    // Prioritize query parameter format since it worked before
     const urlFormats = [
-      `https://www.royalmail.com/track-your-item#/tracking-results/${cleanTrackingNumber}`, // Hash-based (worked before)
-      `https://www.royalmail.com/track-trace?trackNumber=${cleanTrackingNumber}`, // Query param (HTTPS)
+      `https://www.royalmail.com/track-trace?trackNumber=${cleanTrackingNumber}`, // Query param (HTTPS) - This worked!
       `http://www.royalmail.com/track-trace?trackNumber=${cleanTrackingNumber}`, // Query param (HTTP)
       `https://www.royalmail.com/track-your-item?trackNumber=${cleanTrackingNumber}`, // Alternative query param
+      `https://www.royalmail.com/track-your-item#/tracking-results/${cleanTrackingNumber}`, // Hash-based (fallback)
     ];
     
     // Retry up to 2 times to save credits
@@ -204,15 +204,20 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
                 } catch(e) {}
               }
               
-              // Wait a bit longer after accepting cookies
+              // Wait a bit longer after accepting cookies, then reload if needed
               if (cookieAccepted) {
                 await new Promise(resolve => setTimeout(resolve, 2000));
+                // Reload page to ensure cookies are applied and query param is processed
+                if (!${isHashBased ? 'true' : 'false'}) {
+                  window.location.reload();
+                  await new Promise(resolve => setTimeout(resolve, 3000));
+                }
               }
               
               // For hash-based URLs, navigate to hash and wait
               if (${isHashBased ? 'true' : 'false'}) {
                 window.location.hash = '#/tracking-results/${cleanTrackingNumber}';
-                await new Promise(resolve => setTimeout(resolve, 3000));
+                await new Promise(resolve => setTimeout(resolve, 4000));
               }
               
               // Wait for tracking content to load
