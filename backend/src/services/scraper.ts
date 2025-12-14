@@ -144,51 +144,81 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
           const isHashBased = trackingUrl.includes('#/tracking-results/');
           const jsSnippet = `
             (async function() {
-              // Accept cookies if banner is present - try multiple selectors
+              // Aggressively accept cookies - try multiple methods
+              let cookieAccepted = false;
+              
+              // Method 1: Set cookie directly (if possible)
               try {
-                // Try multiple ways to find and click accept button
-                let clicked = false;
-                
-                // Method 1: Look for button with "accept" or "continue" text
-                const buttons = Array.from(document.querySelectorAll('button, a, [role="button"]'));
-                for (const btn of buttons) {
-                  const text = (btn.textContent || btn.innerText || '').toLowerCase().trim();
-                  if ((text.includes('accept') || text.includes('continue') || text === 'ok') && 
-                      (text.includes('cookie') || text.includes('privacy') || text.length < 25)) {
-                    btn.click();
-                    clicked = true;
+                document.cookie = 'cookieConsent=accepted; path=/; domain=.royalmail.com; max-age=31536000';
+                document.cookie = 'cookieConsent=accepted; path=/; domain=www.royalmail.com; max-age=31536000';
+              } catch(e) {}
+              
+              // Method 2: Find and click accept button - try all possible selectors
+              const selectors = [
+                'button[class*="accept"]',
+                'button[class*="cookie"]',
+                'a[class*="accept"]',
+                'a[class*="cookie"]',
+                '[id*="accept"]',
+                '[id*="cookie"]',
+                'button:contains("Accept")',
+                'button:contains("Continue")',
+                'a:contains("Accept")',
+                'a:contains("Continue")'
+              ];
+              
+              // Try all buttons/links on the page
+              const allClickable = Array.from(document.querySelectorAll('button, a, [role="button"], [onclick]'));
+              for (const element of allClickable) {
+                try {
+                  const text = (element.textContent || element.innerText || element.getAttribute('aria-label') || '').toLowerCase().trim();
+                  const id = (element.id || '').toLowerCase();
+                  const className = (element.className || '').toLowerCase();
+                  
+                  // Check if this looks like an accept button
+                  if ((text.includes('accept') || text.includes('continue') || text === 'ok' || text === 'yes') &&
+                      (text.includes('cookie') || text.includes('privacy') || text.length < 30 || 
+                       id.includes('accept') || id.includes('cookie') ||
+                       className.includes('accept') || className.includes('cookie'))) {
+                    element.click();
+                    cookieAccepted = true;
+                    await new Promise(resolve => setTimeout(resolve, 1000));
                     break;
                   }
-                }
-                
-                // Method 2: Look for common cookie banner IDs/classes
-                if (!clicked) {
-                  const cookieBanner = document.querySelector('[id*="cookie"], [class*="cookie"], [id*="privacy"], [class*="privacy"]');
-                  if (cookieBanner) {
-                    const acceptBtn = cookieBanner.querySelector('button, a');
-                    if (acceptBtn) {
-                      acceptBtn.click();
-                      clicked = true;
-                    }
-                  }
-                }
-                
-                if (clicked) {
-                  await new Promise(resolve => setTimeout(resolve, 2000));
-                }
-              } catch(e) {
-                console.log('Cookie acceptance error:', e);
+                } catch(e) {}
               }
               
-              // For hash-based URLs, wait for hash routing to process
+              // Method 3: Try to find cookie banner and click first button
+              if (!cookieAccepted) {
+                try {
+                  const banners = document.querySelectorAll('[id*="cookie"], [class*="cookie"], [id*="privacy"], [class*="privacy"], [id*="consent"], [class*="consent"]');
+                  for (const banner of banners) {
+                    const btn = banner.querySelector('button, a, [role="button"]');
+                    if (btn) {
+                      btn.click();
+                      cookieAccepted = true;
+                      await new Promise(resolve => setTimeout(resolve, 1000));
+                      break;
+                    }
+                  }
+                } catch(e) {}
+              }
+              
+              // Wait a bit longer after accepting cookies
+              if (cookieAccepted) {
+                await new Promise(resolve => setTimeout(resolve, 2000));
+              }
+              
+              // For hash-based URLs, navigate to hash and wait
               if (${isHashBased ? 'true' : 'false'}) {
+                window.location.hash = '#/tracking-results/${cleanTrackingNumber}';
                 await new Promise(resolve => setTimeout(resolve, 3000));
               }
               
               // Wait for tracking content to load
               const trackingNumber = '${cleanTrackingNumber}';
               let attempts = 0;
-              const maxAttempts = 24; // 12 seconds max (24 * 500ms)
+              const maxAttempts = 30; // 15 seconds max (30 * 500ms)
               
               while (attempts < maxAttempts) {
                 const text = (document.body.innerText || document.body.textContent || '').toLowerCase();
