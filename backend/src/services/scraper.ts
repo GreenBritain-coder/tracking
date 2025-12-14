@@ -203,8 +203,8 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
     
     try {
       // Step 1: Create tracking in TrackingMore (if not already exists)
-      // Carrier code for Royal Mail is typically 'royal-mail' or 'royalmail'
-      const carrierCode = 'royal-mail';
+      // Courier code for Royal Mail - try 'royal-mail' first, fallback to 'royalmail' if needed
+      const courierCode = 'royal-mail';
       
       try {
         console.log(`[${trackingNumber}] Creating tracking in TrackingMore...`);
@@ -212,7 +212,7 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
           `${TRACKINGMORE_API_BASE}/trackings/post`,
           {
             tracking_number: cleanTrackingNumber,
-            carrier_code: carrierCode,
+            courier_code: courierCode,
           },
           {
             headers: {
@@ -240,7 +240,7 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
         {
           params: {
             tracking_number: cleanTrackingNumber,
-            carrier_code: carrierCode,
+            courier_code: courierCode,
           },
           headers: {
             'Tracking-Api-Key': TRACKINGMORE_API_KEY,
