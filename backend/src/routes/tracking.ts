@@ -307,9 +307,9 @@ router.patch(
         custom_timestamp || null
       );
       
-      // Get updated tracking with joins
-      const allTracking = await getAllTrackingNumbers();
-      const updated = allTracking.find(t => t.id === Number(id));
+      // Get updated tracking with joins (use large limit to get all, then find the one we need)
+      const allTracking = await getAllTrackingNumbers(1, 10000);
+      const updated = allTracking.data.find(t => t.id === Number(id));
       
       res.json(updated);
     } catch (error) {

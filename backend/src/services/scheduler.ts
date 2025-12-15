@@ -14,11 +14,10 @@ export async function updateAllTrackingStatuses() {
   console.log('Starting scheduled tracking update...');
   
   try {
-    const allTrackingNumbers = await getAllTrackingNumbers();
+    // Get all tracking numbers (use large limit to get all)
+    const allTrackingNumbersResponse = await getAllTrackingNumbers(1, 10000);
+    const trackingNumbers = allTrackingNumbersResponse.data;
     
-    // Don't filter out delivered - we still want to update status_details for them
-    // Only skip if we want to avoid checking delivered (but we need status_details)
-    const trackingNumbers = allTrackingNumbers;
     console.log(`Checking ${trackingNumbers.length} tracking number(s)...`);
     
     let updated = 0;
@@ -74,7 +73,7 @@ export async function updateAllTrackingStatuses() {
     }
     
     console.log(
-      `Update complete. Updated: ${updated}, Errors: ${errors}, Checked: ${trackingNumbers.length}, Total: ${allTrackingNumbers.length}`
+      `Update complete. Updated: ${updated}, Errors: ${errors}, Checked: ${trackingNumbers.length}, Total: ${allTrackingNumbersResponse.data.length}`
     );
   } catch (error) {
     console.error('Error in scheduled update:', error);

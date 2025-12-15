@@ -29,11 +29,34 @@ function verifyWebhookSignature(body: string, signature: string): boolean {
     .update(body)
     .digest('hex');
 
+  // Remove any prefix from signature (e.g., "sha256=" or "sha256:")
+  const cleanSignature = signature.replace(/^(sha256[=:]|)/i, '').trim();
+  const cleanExpected = expectedSignature.trim();
+
+  console.log('Signature verification details:');
+  console.log('  Received signature length:', cleanSignature.length);
+  console.log('  Expected signature length:', cleanExpected.length);
+  console.log('  Received signature (first 20 chars):', cleanSignature.substring(0, 20));
+  console.log('  Expected signature (first 20 chars):', cleanExpected.substring(0, 20));
+
+  // If lengths don't match, signatures can't be equal
+  if (cleanSignature.length !== cleanExpected.length) {
+    console.error('Signature length mismatch - verification failed');
+    return false;
+  }
+
   // Compare signatures (use timing-safe comparison)
-  return crypto.timingSafeEqual(
-    Buffer.from(signature),
-    Buffer.from(expectedSignature)
-  );
+  try {
+    const result = crypto.timingSafeEqual(
+      Buffer.from(cleanSignature, 'hex'),
+      Buffer.from(cleanExpected, 'hex')
+    );
+    return result;
+  } catch (error) {
+    console.error('Error during signature comparison:', error);
+    // Fallback to simple string comparison if hex parsing fails
+    return cleanSignature.toLowerCase() === cleanExpected.toLowerCase();
+  }
 }
 
 /**
@@ -134,25 +157,46 @@ router.post('/trackingmore', async (req: any, res: Response) => {
   
   try {
     // Get raw body for signature verification
-    const rawBody = req.rawBody || JSON.stringify(req.body);
+    // Use rawBody if available (from middleware), otherwise stringify the parsed body
+    const rawBody = req.rawBody || (req.body ? JSON.stringify(req.body) : '');
     console.log('Raw body length:', rawBody.length);
     console.log('Raw body preview:', rawBody.substring(0, 200));
+    console.log('Has rawBody from middleware:', !!req.rawBody);
     
     // Get signature from header
     // TrackingMore may send signature in different header formats
     const signature = req.headers['x-signature'] as string || 
                      req.headers['x-trackingmore-signature'] as string ||
-                     req.headers['signature'] as string;
+                     req.headers['signature'] as string ||
+                     req.headers['x-hub-signature-256'] as string;
+    
+    console.log('All signature-related headers:');
+    console.log('  x-signature:', req.headers['x-signature']);
+    console.log('  x-trackingmore-signature:', req.headers['x-trackingmore-signature']);
+    console.log('  signature:', req.headers['signature']);
+    console.log('  x-hub-signature-256:', req.headers['x-hub-signature-256']);
     console.log('Signature header present:', !!signature);
     console.log('Webhook secret configured:', !!WEBHOOK_SECRET);
+    console.log('Webhook secret length:', WEBHOOK_SECRET.length);
 
     // Verify webhook signature (if secret is configured)
-    if (WEBHOOK_SECRET && !verifyWebhookSignature(rawBody, signature)) {
-      console.error('Webhook signature verification failed');
-      console.error('Expected signature format: SHA256 HMAC of raw body');
-      return res.status(401).json({ error: 'Invalid signature' });
-    } else if (WEBHOOK_SECRET) {
-      console.log('Webhook signature verified successfully');
+    if (WEBHOOK_SECRET) {
+      if (!signature) {
+        console.error('Webhook signature verification failed: No signature header found');
+        return res.status(401).json({ error: 'Missing signature header' });
+      }
+      
+      const isValid = verifyWebhookSignature(rawBody, signature);
+      if (!isValid) {
+        console.error('Webhook signature verification failed');
+        console.error('Expected signature format: SHA256 HMAC of raw body');
+        console.error('Make sure TRACKINGMORE_WEBHOOK_SECRET matches the secret configured in TrackingMore');
+        return res.status(401).json({ error: 'Invalid signature' });
+      } else {
+        console.log('Webhook signature verified successfully');
+      }
+    } else {
+      console.warn('Webhook secret not configured - skipping signature verification (development mode)');
     }
 
     // Use parsed body (from express.json middleware) or parse raw body

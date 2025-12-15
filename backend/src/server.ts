@@ -18,12 +18,25 @@ app.use(cors());
 
 // Webhook routes need raw body for signature verification
 // Register webhook route middleware BEFORE general JSON middleware
-app.use('/api/webhook', express.json({ 
+app.use('/api/webhook', express.text({ 
+  type: 'application/json',
   verify: (req: any, res, buf) => {
-    // Store raw body for signature verification
+    // Store raw body as string for signature verification
     req.rawBody = buf.toString('utf8');
   }
 }));
+
+// Parse JSON for webhook routes after capturing raw body
+app.use('/api/webhook', (req: any, res, next) => {
+  if (req.rawBody) {
+    try {
+      req.body = JSON.parse(req.rawBody);
+    } catch (e) {
+      console.warn('Failed to parse webhook body as JSON:', e);
+    }
+  }
+  next();
+});
 
 // JSON middleware for other routes
 app.use(express.json());
