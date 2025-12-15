@@ -16,8 +16,14 @@ export async function updateAllTrackingStatuses() {
   try {
     // Get all tracking numbers (use large limit to get all)
     const allTrackingNumbersResponse = await getAllTrackingNumbers(1, 10000);
-    const trackingNumbers = allTrackingNumbersResponse.data;
+    const allTrackingNumbers = allTrackingNumbersResponse.data;
     
+    // Filter out delivered items - no need to recheck them
+    const trackingNumbers = allTrackingNumbers.filter(tn => tn.current_status !== 'delivered');
+    const skippedDelivered = allTrackingNumbers.length - trackingNumbers.length;
+    
+    console.log(`Total tracking numbers: ${allTrackingNumbers.length}`);
+    console.log(`Skipping ${skippedDelivered} delivered item(s) - no need to recheck`);
     console.log(`Checking ${trackingNumbers.length} tracking number(s)...`);
     
     let updated = 0;
@@ -25,7 +31,7 @@ export async function updateAllTrackingStatuses() {
     
     // If no tracking numbers to check, exit early
     if (trackingNumbers.length === 0) {
-      console.log('No tracking numbers to check');
+      console.log('No tracking numbers to check (all are delivered)');
       isRunning = false;
       return;
     }
@@ -73,7 +79,7 @@ export async function updateAllTrackingStatuses() {
     }
     
     console.log(
-      `Update complete. Updated: ${updated}, Errors: ${errors}, Checked: ${trackingNumbers.length}, Total: ${allTrackingNumbersResponse.data.length}`
+      `Update complete. Updated: ${updated}, Errors: ${errors}, Checked: ${trackingNumbers.length}, Skipped (delivered): ${skippedDelivered}, Total: ${allTrackingNumbers.length}`
     );
   } catch (error) {
     console.error('Error in scheduled update:', error);
