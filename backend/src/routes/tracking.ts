@@ -9,6 +9,7 @@ import {
   updateTrackingStatus,
   deleteTrackingNumber,
   bulkCreateTrackingNumbers,
+  deleteAllTrackingNumbers,
 } from '../models/tracking';
 import { createBox, getAllBoxes, getBoxById, deleteBox } from '../models/box';
 import { 
@@ -143,7 +144,21 @@ router.post(
     body('tracking_numbers').isArray().notEmpty(),
     body('tracking_numbers.*').isString().trim().notEmpty(),
     body('box_id').optional().isInt(),
-    body('custom_timestamp').optional({ nullable: true, checkFalsy: true }).isISO8601().toDate(),
+    body('custom_timestamp')
+      .optional({ nullable: true, checkFalsy: true })
+      .custom((value) => {
+        // If value is null, undefined, or empty string, it's valid
+        if (value === null || value === undefined || value === '') {
+          return true;
+        }
+        // Otherwise, it must be a valid ISO8601 date
+        const date = new Date(value);
+        if (isNaN(date.getTime())) {
+          throw new Error('custom_timestamp must be a valid ISO8601 date string');
+        }
+        return true;
+      })
+      .toDate(),
   ],
   async (req: AuthRequest, res: Response) => {
     const errors = validationResult(req);
@@ -153,6 +168,13 @@ router.post(
 
     try {
       const { tracking_numbers, box_id, custom_timestamp } = req.body;
+      
+      console.log('Bulk import request:', {
+        tracking_numbers_count: tracking_numbers?.length,
+        box_id,
+        custom_timestamp,
+        custom_timestamp_type: typeof custom_timestamp
+      });
       
       // Validate box exists if provided
       if (box_id) {
@@ -167,6 +189,11 @@ router.post(
         box_id || null,
         custom_timestamp || null
       );
+      
+      console.log('Bulk import result:', {
+        created_count: created.length,
+        first_item_custom_timestamp: created[0]?.custom_timestamp
+      });
       res.status(201).json({ 
         message: `Created ${created.length} tracking numbers`,
         tracking_numbers: created 
@@ -188,6 +215,20 @@ router.delete('/numbers/:id', async (req: AuthRequest, res: Response) => {
     res.json({ message: 'Tracking number deleted successfully' });
   } catch (error) {
     console.error('Error deleting tracking number:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Delete all tracking numbers
+router.delete('/numbers', async (req: AuthRequest, res: Response) => {
+  try {
+    const deletedCount = await deleteAllTrackingNumbers();
+    res.json({ 
+      message: `Successfully deleted ${deletedCount} tracking number(s)`,
+      deletedCount 
+    });
+  } catch (error) {
+    console.error('Error deleting all tracking numbers:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

@@ -224,6 +224,11 @@ export async function deleteTrackingNumber(id: number): Promise<boolean> {
   return (result.rowCount ?? 0) > 0;
 }
 
+export async function deleteAllTrackingNumbers(): Promise<number> {
+  const result = await pool.query('DELETE FROM tracking_numbers');
+  return result.rowCount ?? 0;
+}
+
 export async function bulkCreateTrackingNumbers(
   trackingNumbers: string[],
   boxId: number | null = null,
@@ -236,6 +241,7 @@ export async function bulkCreateTrackingNumbers(
     await client.query('BEGIN');
     
     for (const tn of trackingNumbers) {
+      console.log(`Inserting tracking number: ${tn.trim()}, customTimestamp: ${customTimestamp}, type: ${typeof customTimestamp}`);
       const result = await client.query(
         `INSERT INTO tracking_numbers (tracking_number, box_id, current_status, custom_timestamp)
          VALUES ($1, $2, 'not_scanned', $3)
@@ -245,12 +251,15 @@ export async function bulkCreateTrackingNumbers(
       );
       
       if (result.rows.length > 0) {
+        console.log(`Created tracking number ${tn.trim()} with custom_timestamp: ${result.rows[0].custom_timestamp}`);
         results.push(result.rows[0]);
         // Create initial status history entry
         await client.query(
           'INSERT INTO status_history (tracking_number_id, status) VALUES ($1, $2)',
           [result.rows[0].id, 'not_scanned']
         );
+      } else {
+        console.log(`Tracking number ${tn.trim()} already exists, skipped (ON CONFLICT DO NOTHING)`);
       }
     }
     

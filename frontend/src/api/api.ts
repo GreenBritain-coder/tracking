@@ -67,6 +67,8 @@ export const api = {
     }),
   deleteTrackingNumber: (id: number) =>
     axios.delete(`${API_URL}/tracking/numbers/${id}`),
+  deleteAllTrackingNumbers: () =>
+    axios.delete(`${API_URL}/tracking/numbers`),
   updateTrackingStatus: (
     id: number, 
     status: 'not_scanned' | 'scanned' | 'delivered',
