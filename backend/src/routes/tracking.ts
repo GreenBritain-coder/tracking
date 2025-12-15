@@ -150,6 +150,20 @@ router.post(
     body('tracking_numbers').isArray().notEmpty(),
     body('tracking_numbers.*').isString().trim().notEmpty(),
     body('box_id').optional().isInt(),
+    body('postbox_id')
+      .optional({ nullable: true, checkFalsy: true })
+      .custom((value) => {
+        // If value is null, undefined, or empty string, it's valid
+        if (value === null || value === undefined || value === '') {
+          return true;
+        }
+        // Otherwise, it must be a valid integer
+        const num = typeof value === 'string' ? parseInt(value, 10) : Number(value);
+        if (isNaN(num) || !Number.isInteger(num)) {
+          throw new Error('postbox_id must be a valid integer or null');
+        }
+        return true;
+      }),
     body('custom_timestamp')
       .optional({ nullable: true, checkFalsy: true })
       .custom((value) => {
@@ -173,11 +187,12 @@ router.post(
     }
 
     try {
-      const { tracking_numbers, box_id, custom_timestamp } = req.body;
+      const { tracking_numbers, box_id, postbox_id, custom_timestamp } = req.body;
       
       console.log('Bulk import request:', {
         tracking_numbers_count: tracking_numbers?.length,
         box_id,
+        postbox_id,
         custom_timestamp,
         custom_timestamp_type: typeof custom_timestamp
       });
@@ -190,10 +205,31 @@ router.post(
         }
       }
       
+      // Validate postbox exists if provided
+      if (postbox_id !== undefined && postbox_id !== null && postbox_id !== '') {
+        const postboxIdNum = typeof postbox_id === 'string' ? parseInt(postbox_id) : postbox_id;
+        if (!isNaN(postboxIdNum)) {
+          const postbox = await getPostboxById(postboxIdNum);
+          if (!postbox) {
+            return res.status(404).json({ error: 'Postbox not found' });
+          }
+        }
+      }
+      
+      // Normalize postbox_id: convert empty string to null, ensure it's a number or null
+      let normalizedPostboxId: number | null = null;
+      if (postbox_id !== undefined && postbox_id !== null && postbox_id !== '') {
+        const postboxIdNum = typeof postbox_id === 'string' ? parseInt(postbox_id) : postbox_id;
+        if (!isNaN(postboxIdNum)) {
+          normalizedPostboxId = postboxIdNum;
+        }
+      }
+      
       const created = await bulkCreateTrackingNumbers(
         tracking_numbers, 
         box_id || null,
-        custom_timestamp || null
+        custom_timestamp || null,
+        normalizedPostboxId
       );
       
       console.log('Bulk import result:', {

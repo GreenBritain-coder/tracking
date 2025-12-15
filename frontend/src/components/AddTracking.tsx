@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
-import { api, Box } from '../api/api';
+import { api, Box, Postbox } from '../api/api';
 import './AddTracking.css';
 
 export default function AddTracking() {
   const [boxes, setBoxes] = useState<Box[]>([]);
+  const [postboxes, setPostboxes] = useState<Postbox[]>([]);
   const [selectedBox, setSelectedBox] = useState<number | null>(null);
+  const [selectedPostbox, setSelectedPostbox] = useState<number | null>(null);
   const [newBoxName, setNewBoxName] = useState('');
   const [showNewBox, setShowNewBox] = useState(false);
   const [trackingNumber, setTrackingNumber] = useState('');
@@ -16,6 +18,7 @@ export default function AddTracking() {
 
   useEffect(() => {
     loadBoxes();
+    loadPostboxes();
   }, []);
 
   const loadBoxes = async () => {
@@ -24,6 +27,15 @@ export default function AddTracking() {
       setBoxes(response.data);
     } catch (error) {
       console.error('Failed to load boxes:', error);
+    }
+  };
+
+  const loadPostboxes = async () => {
+    try {
+      const response = await api.getPostboxes();
+      setPostboxes(response.data);
+    } catch (error) {
+      console.error('Failed to load postboxes:', error);
     }
   };
 
@@ -95,10 +107,12 @@ export default function AddTracking() {
       const response = await api.bulkCreateTrackingNumbers(
         numbers,
         selectedBox || undefined,
-        customTimestamp
+        customTimestamp,
+        selectedPostbox || undefined
       );
       setBulkTrackingNumbers('');
       setBulkCustomTimestamp('');
+      setSelectedPostbox(null);
       setMessage({
         type: 'success',
         text: `Successfully added ${response.data.tracking_numbers.length} tracking numbers`,
@@ -207,6 +221,26 @@ export default function AddTracking() {
               rows={10}
               required
             />
+          </div>
+          <div className="form-group">
+            <label htmlFor="bulk-postbox">
+              Postbox (optional)
+            </label>
+            <select
+              id="bulk-postbox"
+              value={selectedPostbox || ''}
+              onChange={(e) =>
+                setSelectedPostbox(e.target.value ? parseInt(e.target.value) : null)
+              }
+            >
+              <option value="">No Postbox</option>
+              {postboxes.map((postbox) => (
+                <option key={postbox.id} value={postbox.id}>
+                  {postbox.name}
+                </option>
+              ))}
+            </select>
+            <small>If provided, this postbox will be applied to all tracking numbers in this bulk import.</small>
           </div>
           <div className="form-group">
             <label htmlFor="bulk-custom-timestamp">

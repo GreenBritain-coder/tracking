@@ -60,11 +60,12 @@ export const api = {
       tracking_number: trackingNumber,
       box_id: boxId,
     }),
-  bulkCreateTrackingNumbers: (trackingNumbers: string[], boxId?: number, customTimestamp?: string | null) =>
+  bulkCreateTrackingNumbers: (trackingNumbers: string[], boxId?: number, customTimestamp?: string | null, postboxId?: number | null) =>
     axios.post(`${API_URL}/tracking/numbers/bulk`, {
       tracking_numbers: trackingNumbers,
       box_id: boxId,
       custom_timestamp: customTimestamp,
+      postbox_id: postboxId,
     }),
   deleteTrackingNumber: (id: number) =>
     axios.delete(`${API_URL}/tracking/numbers/${id}`),

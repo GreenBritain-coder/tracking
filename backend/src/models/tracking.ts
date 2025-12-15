@@ -284,7 +284,8 @@ export async function deleteAllTrackingNumbers(): Promise<number> {
 export async function bulkCreateTrackingNumbers(
   trackingNumbers: string[],
   boxId: number | null = null,
-  customTimestamp: Date | null = null
+  customTimestamp: Date | null = null,
+  postboxId: number | null = null
 ): Promise<TrackingNumber[]> {
   const results: TrackingNumber[] = [];
   const client = await pool.connect();
@@ -293,17 +294,17 @@ export async function bulkCreateTrackingNumbers(
     await client.query('BEGIN');
     
     for (const tn of trackingNumbers) {
-      console.log(`Inserting tracking number: ${tn.trim()}, customTimestamp: ${customTimestamp}, type: ${typeof customTimestamp}`);
+      console.log(`Inserting tracking number: ${tn.trim()}, customTimestamp: ${customTimestamp}, postboxId: ${postboxId}, type: ${typeof customTimestamp}`);
       const result = await client.query(
-        `INSERT INTO tracking_numbers (tracking_number, box_id, current_status, custom_timestamp)
-         VALUES ($1, $2, 'not_scanned', $3)
+        `INSERT INTO tracking_numbers (tracking_number, box_id, current_status, custom_timestamp, postbox_id)
+         VALUES ($1, $2, 'not_scanned', $3, $4)
          ON CONFLICT (tracking_number) DO NOTHING
          RETURNING *`,
-        [tn.trim(), boxId, customTimestamp]
+        [tn.trim(), boxId, customTimestamp, postboxId]
       );
       
       if (result.rows.length > 0) {
-        console.log(`Created tracking number ${tn.trim()} with custom_timestamp: ${result.rows[0].custom_timestamp}`);
+        console.log(`Created tracking number ${tn.trim()} with custom_timestamp: ${result.rows[0].custom_timestamp}, postbox_id: ${result.rows[0].postbox_id}`);
         results.push(result.rows[0]);
         // Create initial status history entry
         await client.query(
