@@ -51,7 +51,8 @@ export async function createTrackingNumber(
 
 export async function getAllTrackingNumbers(
   page: number = 1,
-  limit: number = 50
+  limit: number = 50,
+  status?: TrackingStatus
 ): Promise<{ 
   data: TrackingNumberWithBox[]; 
   total: number; 
@@ -66,7 +67,11 @@ export async function getAllTrackingNumbers(
 }> {
   const offset = (page - 1) * limit;
   
-  // Get total count and stats
+  // Build WHERE clause for status filter
+  const statusWhere = status ? `WHERE t.current_status = $3` : '';
+  const statusParam = status ? [status] : [];
+  
+  // Get total count and stats (always get all stats, not filtered)
   const countResult = await pool.query(`
     SELECT 
       COUNT(*) as total,
@@ -83,7 +88,18 @@ export async function getAllTrackingNumbers(
     total
   };
   
-  // Get paginated data
+  // Get filtered total count if status filter is applied
+  let filteredTotal = total;
+  if (status) {
+    const filteredCountResult = await pool.query(`
+      SELECT COUNT(*) as total
+      FROM tracking_numbers
+      WHERE current_status = $1
+    `, [status]);
+    filteredTotal = parseInt(filteredCountResult.rows[0].total);
+  }
+  
+  // Get paginated data with optional status filter
   const result = await pool.query(`
     SELECT 
       t.*,
@@ -92,13 +108,14 @@ export async function getAllTrackingNumbers(
     FROM tracking_numbers t
     LEFT JOIN boxes b ON t.box_id = b.id
     LEFT JOIN postboxes p ON t.postbox_id = p.id
+    ${statusWhere}
     ORDER BY t.created_at DESC
     LIMIT $1 OFFSET $2
-  `, [limit, offset]);
+  `, status ? [limit, offset, status] : [limit, offset]);
   
   return {
     data: result.rows,
-    total,
+    total: filteredTotal,
     page,
     limit,
     stats
@@ -108,7 +125,8 @@ export async function getAllTrackingNumbers(
 export async function getTrackingNumbersByBox(
   boxId: number,
   page: number = 1,
-  limit: number = 50
+  limit: number = 50,
+  status?: TrackingStatus
 ): Promise<{ 
   data: TrackingNumberWithBox[]; 
   total: number; 
@@ -123,7 +141,11 @@ export async function getTrackingNumbersByBox(
 }> {
   const offset = (page - 1) * limit;
   
-  // Get total count and stats for this box
+  // Build WHERE clause for status filter
+  const statusCondition = status ? `AND t.current_status = $4` : '';
+  const queryParams = status ? [boxId, limit, offset, status] : [boxId, limit, offset];
+  
+  // Get total count and stats for this box (always get all stats, not filtered)
   const countResult = await pool.query(`
     SELECT 
       COUNT(*) as total,
@@ -141,7 +163,18 @@ export async function getTrackingNumbersByBox(
     total
   };
   
-  // Get paginated data
+  // Get filtered total count if status filter is applied
+  let filteredTotal = total;
+  if (status) {
+    const filteredCountResult = await pool.query(`
+      SELECT COUNT(*) as total
+      FROM tracking_numbers
+      WHERE box_id = $1 AND current_status = $2
+    `, [boxId, status]);
+    filteredTotal = parseInt(filteredCountResult.rows[0].total);
+  }
+  
+  // Get paginated data with optional status filter
   const result = await pool.query(`
     SELECT 
       t.*,
@@ -150,14 +183,14 @@ export async function getTrackingNumbersByBox(
     FROM tracking_numbers t
     LEFT JOIN boxes b ON t.box_id = b.id
     LEFT JOIN postboxes p ON t.postbox_id = p.id
-    WHERE t.box_id = $1
+    WHERE t.box_id = $1 ${statusCondition}
     ORDER BY t.created_at DESC
     LIMIT $2 OFFSET $3
-  `, [boxId, limit, offset]);
+  `, queryParams);
   
   return {
     data: result.rows,
-    total,
+    total: filteredTotal,
     page,
     limit,
     stats

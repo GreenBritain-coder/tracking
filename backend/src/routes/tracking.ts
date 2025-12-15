@@ -79,10 +79,16 @@ router.get('/numbers', async (req: AuthRequest, res: Response) => {
     const boxId = req.query.boxId ? parseInt(req.query.boxId as string) : undefined;
     const page = req.query.page ? parseInt(req.query.page as string) : 1;
     const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
+    const status = req.query.status as 'not_scanned' | 'scanned' | 'delivered' | undefined;
+    
+    // Validate status if provided
+    if (status && !['not_scanned', 'scanned', 'delivered'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status filter' });
+    }
     
     const result = boxId
-      ? await getTrackingNumbersByBox(boxId, page, limit)
-      : await getAllTrackingNumbers(page, limit);
+      ? await getTrackingNumbersByBox(boxId, page, limit, status)
+      : await getAllTrackingNumbers(page, limit, status);
     res.json(result);
   } catch (error) {
     console.error('Error fetching tracking numbers:', error);

@@ -36,11 +36,12 @@ export const api = {
   deleteBox: (id: number) => axios.delete(`${API_URL}/tracking/boxes/${id}`),
 
   // Tracking Numbers
-  getTrackingNumbers: (boxId?: number, page?: number, limit?: number) => {
+  getTrackingNumbers: (boxId?: number, page?: number, limit?: number, status?: 'not_scanned' | 'scanned' | 'delivered') => {
     const params: any = {};
     if (boxId) params.boxId = boxId;
     if (page) params.page = page;
     if (limit) params.limit = limit;
+    if (status) params.status = status;
     return axios.get<{ 
       data: TrackingNumber[]; 
       total: number; 

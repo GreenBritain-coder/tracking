@@ -25,6 +25,7 @@ export default function Dashboard() {
   const [boxes, setBoxes] = useState<Box[]>([]);
   const [postboxes, setPostboxes] = useState<Postbox[]>([]);
   const [selectedBox, setSelectedBox] = useState<number | null>(null);
+  const [selectedStatus, setSelectedStatus] = useState<'not_scanned' | 'scanned' | 'delivered' | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
@@ -48,13 +49,13 @@ export default function Dashboard() {
     // Refresh every 30 seconds
     const interval = setInterval(loadData, 30000);
     return () => clearInterval(interval);
-  }, [selectedBox, currentPage, itemsPerPage]);
+  }, [selectedBox, selectedStatus, currentPage, itemsPerPage]);
 
   const loadData = async () => {
     try {
       setLoading(true);
       const [trackingRes, boxesRes, postboxesRes] = await Promise.all([
-        api.getTrackingNumbers(selectedBox || undefined, currentPage, itemsPerPage),
+        api.getTrackingNumbers(selectedBox || undefined, currentPage, itemsPerPage, selectedStatus || undefined),
         api.getBoxes(),
         api.getPostboxes(),
       ]);
@@ -268,6 +269,22 @@ export default function Dashboard() {
                     {box.name}
                   </option>
                 ))}
+              </select>
+            </label>
+            <label>
+              Filter by Status:
+              <select
+                value={selectedStatus || ''}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setSelectedStatus(value ? value as 'not_scanned' | 'scanned' | 'delivered' : null);
+                  setCurrentPage(1); // Reset to first page when filter changes
+                }}
+              >
+                <option value="">All Statuses</option>
+                <option value="not_scanned">🔴 Not Scanned ({stats.not_scanned})</option>
+                <option value="scanned">🟡 Scanned ({stats.scanned})</option>
+                <option value="delivered">🟢 Delivered ({stats.delivered})</option>
               </select>
             </label>
             <label>
