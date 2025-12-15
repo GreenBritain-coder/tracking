@@ -185,18 +185,37 @@ export async function updateTrackingStatus(
   try {
     await client.query('BEGIN');
     
-    // Update tracking number
-    const updateResult = await client.query(
-      `UPDATE tracking_numbers 
-       SET current_status = $1, 
-           status_details = $2, 
-           postbox_id = $3,
-           custom_timestamp = $4,
-           updated_at = CURRENT_TIMESTAMP 
-       WHERE id = $5 
-       RETURNING *`,
-      [status, statusDetails || null, postboxId ?? null, customTimestamp || null, id]
-    );
+    // If customTimestamp is undefined, preserve the existing value
+    // Only update custom_timestamp if it's explicitly provided (including null to clear it)
+    const shouldUpdateCustomTimestamp = customTimestamp !== undefined;
+    
+    let updateResult;
+    if (shouldUpdateCustomTimestamp) {
+      // Update including custom_timestamp
+      updateResult = await client.query(
+        `UPDATE tracking_numbers 
+         SET current_status = $1, 
+             status_details = $2, 
+             postbox_id = $3,
+             custom_timestamp = $4,
+             updated_at = CURRENT_TIMESTAMP 
+         WHERE id = $5 
+         RETURNING *`,
+        [status, statusDetails || null, postboxId ?? null, customTimestamp, id]
+      );
+    } else {
+      // Update without changing custom_timestamp (preserve existing value)
+      updateResult = await client.query(
+        `UPDATE tracking_numbers 
+         SET current_status = $1, 
+             status_details = $2, 
+             postbox_id = $3,
+             updated_at = CURRENT_TIMESTAMP 
+         WHERE id = $4 
+         RETURNING *`,
+        [status, statusDetails || null, postboxId ?? null, id]
+      );
+    }
     
     if (updateResult.rows.length === 0) {
       await client.query('ROLLBACK');
