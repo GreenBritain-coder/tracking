@@ -33,23 +33,34 @@ export default function Dashboard() {
   const [newPostboxName, setNewPostboxName] = useState('');
   const [editingTrackingId, setEditingTrackingId] = useState<number | null>(null);
   const [customTimestamp, setCustomTimestamp] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(50);
+  const [totalItems, setTotalItems] = useState(0);
+  const [stats, setStats] = useState({
+    not_scanned: 0,
+    scanned: 0,
+    delivered: 0,
+    total: 0
+  });
 
   useEffect(() => {
     loadData();
     // Refresh every 30 seconds
     const interval = setInterval(loadData, 30000);
     return () => clearInterval(interval);
-  }, [selectedBox]);
+  }, [selectedBox, currentPage, itemsPerPage]);
 
   const loadData = async () => {
     try {
       setLoading(true);
       const [trackingRes, boxesRes, postboxesRes] = await Promise.all([
-        api.getTrackingNumbers(selectedBox || undefined),
+        api.getTrackingNumbers(selectedBox || undefined, currentPage, itemsPerPage),
         api.getBoxes(),
         api.getPostboxes(),
       ]);
-      setTrackingNumbers(trackingRes.data);
+      setTrackingNumbers(trackingRes.data.data);
+      setTotalItems(trackingRes.data.total);
+      setStats(trackingRes.data.stats);
       setBoxes(boxesRes.data);
       setPostboxes(postboxesRes.data);
       setError('');
@@ -201,9 +212,10 @@ export default function Dashboard() {
               Filter by Box:
               <select
                 value={selectedBox || ''}
-                onChange={(e) =>
-                  setSelectedBox(e.target.value ? parseInt(e.target.value) : null)
-                }
+                onChange={(e) => {
+                  setSelectedBox(e.target.value ? parseInt(e.target.value) : null);
+                  setCurrentPage(1); // Reset to first page when filter changes
+                }}
               >
                 <option value="">All Boxes</option>
                 {boxes.map((box) => (
@@ -211,6 +223,21 @@ export default function Dashboard() {
                     {box.name}
                   </option>
                 ))}
+              </select>
+            </label>
+            <label>
+              Items per page:
+              <select
+                value={itemsPerPage}
+                onChange={(e) => {
+                  setItemsPerPage(parseInt(e.target.value));
+                  setCurrentPage(1); // Reset to first page when page size changes
+                }}
+              >
+                <option value="25">25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+                <option value="200">200</option>
               </select>
             </label>
           </div>
@@ -223,26 +250,26 @@ export default function Dashboard() {
         <div className="stat-card" style={{ borderColor: STATUS_COLORS.not_scanned }}>
           <div className="stat-emoji">{STATUS_EMOJIS.not_scanned}</div>
           <div className="stat-value">
-            {trackingNumbers.filter((t) => t.current_status === 'not_scanned').length}
+            {stats.not_scanned}
           </div>
           <div className="stat-label">Not Scanned</div>
         </div>
         <div className="stat-card" style={{ borderColor: STATUS_COLORS.scanned }}>
           <div className="stat-emoji">{STATUS_EMOJIS.scanned}</div>
           <div className="stat-value">
-            {trackingNumbers.filter((t) => t.current_status === 'scanned').length}
+            {stats.scanned}
           </div>
           <div className="stat-label">Scanned</div>
         </div>
         <div className="stat-card" style={{ borderColor: STATUS_COLORS.delivered }}>
           <div className="stat-emoji">{STATUS_EMOJIS.delivered}</div>
           <div className="stat-value">
-            {trackingNumbers.filter((t) => t.current_status === 'delivered').length}
+            {stats.delivered}
           </div>
           <div className="stat-label">Delivered</div>
         </div>
         <div className="stat-card">
-          <div className="stat-value">{trackingNumbers.length}</div>
+          <div className="stat-value">{stats.total}</div>
           <div className="stat-label">Total</div>
         </div>
       </div>
@@ -519,6 +546,47 @@ export default function Dashboard() {
           </tbody>
         </table>
       </div>
+
+      {totalItems > itemsPerPage && (
+        <div className="pagination">
+          <div className="pagination-info">
+            Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, totalItems)} of {totalItems} entries
+          </div>
+          <div className="pagination-controls">
+            <button
+              onClick={() => setCurrentPage(1)}
+              disabled={currentPage === 1}
+              className="pagination-btn"
+            >
+              First
+            </button>
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="pagination-btn"
+            >
+              Previous
+            </button>
+            <span className="pagination-page-info">
+              Page {currentPage} of {Math.ceil(totalItems / itemsPerPage)}
+            </span>
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(Math.ceil(totalItems / itemsPerPage), prev + 1))}
+              disabled={currentPage >= Math.ceil(totalItems / itemsPerPage)}
+              className="pagination-btn"
+            >
+              Next
+            </button>
+            <button
+              onClick={() => setCurrentPage(Math.ceil(totalItems / itemsPerPage))}
+              disabled={currentPage >= Math.ceil(totalItems / itemsPerPage)}
+              className="pagination-btn"
+            >
+              Last
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

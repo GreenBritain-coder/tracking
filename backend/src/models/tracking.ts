@@ -49,7 +49,41 @@ export async function createTrackingNumber(
   return result.rows[0];
 }
 
-export async function getAllTrackingNumbers(): Promise<TrackingNumberWithBox[]> {
+export async function getAllTrackingNumbers(
+  page: number = 1,
+  limit: number = 50
+): Promise<{ 
+  data: TrackingNumberWithBox[]; 
+  total: number; 
+  page: number; 
+  limit: number;
+  stats: {
+    not_scanned: number;
+    scanned: number;
+    delivered: number;
+    total: number;
+  };
+}> {
+  const offset = (page - 1) * limit;
+  
+  // Get total count and stats
+  const countResult = await pool.query(`
+    SELECT 
+      COUNT(*) as total,
+      COUNT(CASE WHEN current_status = 'not_scanned' THEN 1 END) as not_scanned,
+      COUNT(CASE WHEN current_status = 'scanned' THEN 1 END) as scanned,
+      COUNT(CASE WHEN current_status = 'delivered' THEN 1 END) as delivered
+    FROM tracking_numbers
+  `);
+  const total = parseInt(countResult.rows[0].total);
+  const stats = {
+    not_scanned: parseInt(countResult.rows[0].not_scanned),
+    scanned: parseInt(countResult.rows[0].scanned),
+    delivered: parseInt(countResult.rows[0].delivered),
+    total
+  };
+  
+  // Get paginated data
   const result = await pool.query(`
     SELECT 
       t.*,
@@ -59,11 +93,55 @@ export async function getAllTrackingNumbers(): Promise<TrackingNumberWithBox[]> 
     LEFT JOIN boxes b ON t.box_id = b.id
     LEFT JOIN postboxes p ON t.postbox_id = p.id
     ORDER BY t.created_at DESC
-  `);
-  return result.rows;
+    LIMIT $1 OFFSET $2
+  `, [limit, offset]);
+  
+  return {
+    data: result.rows,
+    total,
+    page,
+    limit,
+    stats
+  };
 }
 
-export async function getTrackingNumbersByBox(boxId: number): Promise<TrackingNumberWithBox[]> {
+export async function getTrackingNumbersByBox(
+  boxId: number,
+  page: number = 1,
+  limit: number = 50
+): Promise<{ 
+  data: TrackingNumberWithBox[]; 
+  total: number; 
+  page: number; 
+  limit: number;
+  stats: {
+    not_scanned: number;
+    scanned: number;
+    delivered: number;
+    total: number;
+  };
+}> {
+  const offset = (page - 1) * limit;
+  
+  // Get total count and stats for this box
+  const countResult = await pool.query(`
+    SELECT 
+      COUNT(*) as total,
+      COUNT(CASE WHEN current_status = 'not_scanned' THEN 1 END) as not_scanned,
+      COUNT(CASE WHEN current_status = 'scanned' THEN 1 END) as scanned,
+      COUNT(CASE WHEN current_status = 'delivered' THEN 1 END) as delivered
+    FROM tracking_numbers
+    WHERE box_id = $1
+  `, [boxId]);
+  const total = parseInt(countResult.rows[0].total);
+  const stats = {
+    not_scanned: parseInt(countResult.rows[0].not_scanned),
+    scanned: parseInt(countResult.rows[0].scanned),
+    delivered: parseInt(countResult.rows[0].delivered),
+    total
+  };
+  
+  // Get paginated data
   const result = await pool.query(`
     SELECT 
       t.*,
@@ -74,8 +152,16 @@ export async function getTrackingNumbersByBox(boxId: number): Promise<TrackingNu
     LEFT JOIN postboxes p ON t.postbox_id = p.id
     WHERE t.box_id = $1
     ORDER BY t.created_at DESC
-  `, [boxId]);
-  return result.rows;
+    LIMIT $2 OFFSET $3
+  `, [boxId, limit, offset]);
+  
+  return {
+    data: result.rows,
+    total,
+    page,
+    limit,
+    stats
+  };
 }
 
 export async function getTrackingNumberById(id: number): Promise<TrackingNumber | null> {

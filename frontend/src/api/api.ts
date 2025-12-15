@@ -36,9 +36,23 @@ export const api = {
   deleteBox: (id: number) => axios.delete(`${API_URL}/tracking/boxes/${id}`),
 
   // Tracking Numbers
-  getTrackingNumbers: (boxId?: number) => {
-    const params = boxId ? { boxId } : {};
-    return axios.get<TrackingNumber[]>(`${API_URL}/tracking/numbers`, { params });
+  getTrackingNumbers: (boxId?: number, page?: number, limit?: number) => {
+    const params: any = {};
+    if (boxId) params.boxId = boxId;
+    if (page) params.page = page;
+    if (limit) params.limit = limit;
+    return axios.get<{ 
+      data: TrackingNumber[]; 
+      total: number; 
+      page: number; 
+      limit: number;
+      stats: {
+        not_scanned: number;
+        scanned: number;
+        delivered: number;
+        total: number;
+      };
+    }>(`${API_URL}/tracking/numbers`, { params });
   },
   createTrackingNumber: (trackingNumber: string, boxId?: number) =>
     axios.post<TrackingNumber>(`${API_URL}/tracking/numbers`, {

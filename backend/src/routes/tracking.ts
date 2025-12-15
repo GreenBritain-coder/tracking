@@ -76,10 +76,13 @@ router.delete('/boxes/:id', async (req: AuthRequest, res: Response) => {
 router.get('/numbers', async (req: AuthRequest, res: Response) => {
   try {
     const boxId = req.query.boxId ? parseInt(req.query.boxId as string) : undefined;
-    const trackingNumbers = boxId
-      ? await getTrackingNumbersByBox(boxId)
-      : await getAllTrackingNumbers();
-    res.json(trackingNumbers);
+    const page = req.query.page ? parseInt(req.query.page as string) : 1;
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
+    
+    const result = boxId
+      ? await getTrackingNumbersByBox(boxId, page, limit)
+      : await getAllTrackingNumbers(page, limit);
+    res.json(result);
   } catch (error) {
     console.error('Error fetching tracking numbers:', error);
     res.status(500).json({ error: 'Internal server error' });
