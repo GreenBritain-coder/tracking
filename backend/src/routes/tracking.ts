@@ -143,6 +143,7 @@ router.post(
     body('tracking_numbers').isArray().notEmpty(),
     body('tracking_numbers.*').isString().trim().notEmpty(),
     body('box_id').optional().isInt(),
+    body('custom_timestamp').optional({ nullable: true, checkFalsy: true }).isISO8601().toDate(),
   ],
   async (req: AuthRequest, res: Response) => {
     const errors = validationResult(req);
@@ -151,7 +152,7 @@ router.post(
     }
 
     try {
-      const { tracking_numbers, box_id } = req.body;
+      const { tracking_numbers, box_id, custom_timestamp } = req.body;
       
       // Validate box exists if provided
       if (box_id) {
@@ -161,7 +162,11 @@ router.post(
         }
       }
       
-      const created = await bulkCreateTrackingNumbers(tracking_numbers, box_id || null);
+      const created = await bulkCreateTrackingNumbers(
+        tracking_numbers, 
+        box_id || null,
+        custom_timestamp || null
+      );
       res.status(201).json({ 
         message: `Created ${created.length} tracking numbers`,
         tracking_numbers: created 

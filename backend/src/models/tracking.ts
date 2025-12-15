@@ -226,7 +226,8 @@ export async function deleteTrackingNumber(id: number): Promise<boolean> {
 
 export async function bulkCreateTrackingNumbers(
   trackingNumbers: string[],
-  boxId: number | null = null
+  boxId: number | null = null,
+  customTimestamp: Date | null = null
 ): Promise<TrackingNumber[]> {
   const results: TrackingNumber[] = [];
   const client = await pool.connect();
@@ -236,11 +237,11 @@ export async function bulkCreateTrackingNumbers(
     
     for (const tn of trackingNumbers) {
       const result = await client.query(
-        `INSERT INTO tracking_numbers (tracking_number, box_id, current_status)
-         VALUES ($1, $2, 'not_scanned')
+        `INSERT INTO tracking_numbers (tracking_number, box_id, current_status, custom_timestamp)
+         VALUES ($1, $2, 'not_scanned', $3)
          ON CONFLICT (tracking_number) DO NOTHING
          RETURNING *`,
-        [tn.trim(), boxId]
+        [tn.trim(), boxId, customTimestamp]
       );
       
       if (result.rows.length > 0) {

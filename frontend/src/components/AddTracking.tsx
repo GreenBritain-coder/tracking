@@ -9,6 +9,7 @@ export default function AddTracking() {
   const [showNewBox, setShowNewBox] = useState(false);
   const [trackingNumber, setTrackingNumber] = useState('');
   const [bulkTrackingNumbers, setBulkTrackingNumbers] = useState('');
+  const [bulkCustomTimestamp, setBulkCustomTimestamp] = useState('');
   const [mode, setMode] = useState<'single' | 'bulk'>('single');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -86,11 +87,18 @@ export default function AddTracking() {
         return;
       }
 
+      // Convert custom timestamp to ISO8601 format if provided
+      const customTimestamp = bulkCustomTimestamp 
+        ? new Date(bulkCustomTimestamp + 'T00:00:00Z').toISOString() 
+        : null;
+
       const response = await api.bulkCreateTrackingNumbers(
         numbers,
-        selectedBox || undefined
+        selectedBox || undefined,
+        customTimestamp
       );
       setBulkTrackingNumbers('');
+      setBulkCustomTimestamp('');
       setMessage({
         type: 'success',
         text: `Successfully added ${response.data.tracking_numbers.length} tracking numbers`,
@@ -199,6 +207,18 @@ export default function AddTracking() {
               rows={10}
               required
             />
+          </div>
+          <div className="form-group">
+            <label htmlFor="bulk-custom-timestamp">
+              Custom Timestamp (optional)
+            </label>
+            <input
+              type="date"
+              id="bulk-custom-timestamp"
+              value={bulkCustomTimestamp}
+              onChange={(e) => setBulkCustomTimestamp(e.target.value)}
+            />
+            <small>If provided, this timestamp will be applied to all tracking numbers in this bulk import.</small>
           </div>
           <button type="submit" disabled={loading} className="submit-btn">
             {loading ? 'Adding...' : 'Add Tracking Numbers'}
