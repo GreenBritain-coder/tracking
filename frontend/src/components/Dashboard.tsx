@@ -84,6 +84,15 @@ export default function Dashboard() {
     }
   };
 
+  const handleRefreshSingle = async (id: number) => {
+    try {
+      await api.refreshTrackingNumber(id);
+      loadData(); // Reload data to show updated status
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to refresh tracking number');
+    }
+  };
+
   const handleDeleteAll = async () => {
     const confirmMessage = `⚠️ WARNING: This will delete ALL ${stats.total} tracking numbers. This action cannot be undone!\n\nType "DELETE ALL" to confirm:`;
     const userInput = prompt(confirmMessage);
@@ -568,6 +577,14 @@ export default function Dashboard() {
                         <option value="scanned">🟡 Scanned</option>
                         <option value="delivered">🟢 Delivered</option>
                       </select>
+                      <button
+                        onClick={() => handleRefreshSingle(tn.id)}
+                        className="refresh-btn"
+                        title="Refresh this tracking number"
+                        style={{ marginRight: '5px' }}
+                      >
+                        🔄 Refresh
+                      </button>
                       <button
                         onClick={() => handleDelete(tn.id)}
                         className="delete-btn"
