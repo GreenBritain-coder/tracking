@@ -231,6 +231,8 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   padding: 1.5rem;
   margin-bottom: 2rem;
+  position: relative;
+  z-index: 10;
 }
 
 .postbox-manager-header {
@@ -658,6 +660,8 @@
 
   .postbox-manager {
     padding: 1rem;
+    position: relative;
+    z-index: 10;
   }
 
   .postbox-create {
@@ -667,6 +671,29 @@
   .postbox-create button {
     width: 100%;
     min-height: 44px;
+  }
+
+  .postbox-item {
+    padding: 0.75rem;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+
+  .postbox-item button {
+    min-height: 36px;
+    font-size: 0.9rem;
+  }
+
+  .postbox-create input {
+    min-height: 44px;
+    font-size: 1rem;
+  }
+
+  .postbox-manager-btn {
+    min-height: 44px;
+    font-size: 1rem;
+    padding: 0.75rem 1rem;
   }
 }
 
