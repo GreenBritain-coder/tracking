@@ -85,7 +85,7 @@ export async function getAllTrackingNumbers(
     const startOfNextDay = new Date(startOfDay);
     startOfNextDay.setUTCDate(startOfNextDay.getUTCDate() + 1);
     
-    conditions.push(`t.custom_timestamp >= $${paramIndex} AND t.custom_timestamp < $${paramIndex + 1}`);
+    conditions.push(`t.custom_timestamp >= $${paramIndex}::TIMESTAMPTZ AND t.custom_timestamp < $${paramIndex + 1}::TIMESTAMPTZ`);
     params.push(startOfDay.toISOString(), startOfNextDay.toISOString());
     paramIndex += 2;
   }
@@ -184,7 +184,7 @@ export async function getTrackingNumbersByBox(
     const startOfNextDay = new Date(startOfDay);
     startOfNextDay.setUTCDate(startOfNextDay.getUTCDate() + 1);
     
-    conditions.push(`t.custom_timestamp >= $${paramIndex} AND t.custom_timestamp < $${paramIndex + 1}`);
+    conditions.push(`t.custom_timestamp >= $${paramIndex}::TIMESTAMPTZ AND t.custom_timestamp < $${paramIndex + 1}::TIMESTAMPTZ`);
     params.push(startOfDay.toISOString(), startOfNextDay.toISOString());
     paramIndex += 2;
   }
