@@ -15,6 +15,8 @@ export default function AddTracking() {
   const [mode, setMode] = useState<'single' | 'bulk'>('single');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [showBoxManagement, setShowBoxManagement] = useState(false);
+  const [deletingBoxId, setDeletingBoxId] = useState<number | null>(null);
 
   useEffect(() => {
     loadBoxes();
@@ -55,6 +57,30 @@ export default function AddTracking() {
         type: 'error',
         text: error.response?.data?.error || 'Failed to create box',
       });
+    }
+  };
+
+  const handleDeleteBox = async (boxId: number, boxName: string) => {
+    if (!window.confirm(`Are you sure you want to delete the box "${boxName}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    setDeletingBoxId(boxId);
+    try {
+      await api.deleteBox(boxId);
+      setBoxes(boxes.filter(box => box.id !== boxId));
+      // Clear selection if the deleted box was selected
+      if (selectedBox === boxId) {
+        setSelectedBox(null);
+      }
+      setMessage({ type: 'success', text: `Box "${boxName}" deleted successfully` });
+    } catch (error: any) {
+      setMessage({
+        type: 'error',
+        text: error.response?.data?.error || 'Failed to delete box',
+      });
+    } finally {
+      setDeletingBoxId(null);
     }
   };
 
@@ -174,6 +200,36 @@ export default function AddTracking() {
           <button type="submit">Create Box</button>
         </form>
       )}
+
+      <div className="box-management">
+        <button
+          onClick={() => setShowBoxManagement(!showBoxManagement)}
+          className="manage-boxes-btn"
+        >
+          {showBoxManagement ? 'Hide' : 'Manage'} Boxes ({boxes.length})
+        </button>
+
+        {showBoxManagement && (
+          <div className="box-list">
+            {boxes.length === 0 ? (
+              <p className="no-boxes">No boxes created yet.</p>
+            ) : (
+              boxes.map((box) => (
+                <div key={box.id} className="box-item">
+                  <span className="box-name">{box.name}</span>
+                  <button
+                    onClick={() => handleDeleteBox(box.id, box.name)}
+                    disabled={deletingBoxId === box.id}
+                    className="delete-box-btn"
+                  >
+                    {deletingBoxId === box.id ? 'Deleting...' : 'Delete'}
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
 
       <div className="mode-selector">
         <button

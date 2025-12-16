@@ -94,6 +94,79 @@
   font-size: 1rem;
 }
 
+.box-management {
+  margin-bottom: 1.5rem;
+}
+
+.manage-boxes-btn {
+  background-color: #95a5a6;
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background-color 0.2s;
+  margin-bottom: 1rem;
+}
+
+.manage-boxes-btn:hover {
+  background-color: #7f8c8d;
+}
+
+.box-list {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  padding: 1rem;
+}
+
+.no-boxes {
+  text-align: center;
+  color: #666;
+  font-style: italic;
+  margin: 1rem 0;
+}
+
+.box-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem;
+  border: 1px solid #eee;
+  border-radius: 4px;
+  margin-bottom: 0.5rem;
+}
+
+.box-item:last-child {
+  margin-bottom: 0;
+}
+
+.box-name {
+  font-weight: 500;
+  color: #2c3e50;
+}
+
+.delete-box-btn {
+  background-color: #e74c3c;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background-color 0.2s;
+}
+
+.delete-box-btn:hover:not(:disabled) {
+  background-color: #c0392b;
+}
+
+.delete-box-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .mode-selector {
   display: flex;
   gap: 1rem;
@@ -227,6 +300,24 @@
   .new-box-form button {
     width: 100%;
     min-height: 44px;
+  }
+
+  .manage-boxes-btn {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .box-list {
+    padding: 0.75rem;
+  }
+
+  .box-item {
+    padding: 1rem;
+  }
+
+  .delete-box-btn {
+    min-height: 36px;
+    font-size: 0.9rem;
   }
 
   .mode-selector {
