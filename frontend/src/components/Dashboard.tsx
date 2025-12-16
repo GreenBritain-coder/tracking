@@ -202,7 +202,7 @@ export default function Dashboard() {
   return (
     <div className="dashboard">
       <div className="dashboard-header">
-        <h2>Tracking Dashboard</h2>
+        <h2>Dashboard</h2>
         <div className="dashboard-actions">
           <button
             onClick={handleRefresh}
