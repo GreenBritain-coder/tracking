@@ -189,3 +189,94 @@
   color: white;
 }
 
+/* Mobile Responsive Styles */
+@media (max-width: 768px) {
+  .analytics h2 {
+    font-size: 1.5rem;
+  }
+
+  .overview-section {
+    padding: 1rem;
+  }
+
+  .overview-stats {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .stat-item {
+    padding: 0.75rem;
+  }
+
+  .stat-value {
+    font-size: 1.25rem;
+  }
+
+  .boxes-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .box-card {
+    padding: 1rem;
+  }
+
+  .box-details-section {
+    padding: 1rem;
+  }
+
+  .details-table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .details-table {
+    min-width: 600px;
+  }
+
+  .details-table th,
+  .details-table td {
+    padding: 0.75rem 0.5rem;
+    font-size: 0.875rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .analytics h2 {
+    font-size: 1.25rem;
+  }
+
+  .overview-section,
+  .box-details-section {
+    padding: 0.75rem;
+  }
+
+  .stat-label {
+    font-size: 0.8rem;
+  }
+
+  .stat-value {
+    font-size: 1.1rem;
+  }
+
+  .box-card h4 {
+    font-size: 1.1rem;
+  }
+
+  .box-stat {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+  }
+
+  .details-table th,
+  .details-table td {
+    padding: 0.5rem 0.25rem;
+    font-size: 0.75rem;
+  }
+
+  .tracking-number {
+    font-size: 0.8rem;
+  }
+}
+

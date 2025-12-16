@@ -52,7 +52,8 @@ export async function createTrackingNumber(
 export async function getAllTrackingNumbers(
   page: number = 1,
   limit: number = 50,
-  status?: TrackingStatus
+  status?: TrackingStatus,
+  customTimestamp?: string
 ): Promise<{ 
   data: TrackingNumberWithBox[]; 
   total: number; 
@@ -67,9 +68,29 @@ export async function getAllTrackingNumbers(
 }> {
   const offset = (page - 1) * limit;
   
-  // Build WHERE clause for status filter
-  const statusWhere = status ? `WHERE t.current_status = $3` : '';
-  const statusParam = status ? [status] : [];
+  // Build WHERE conditions
+  const conditions: string[] = [];
+  const params: any[] = [];
+  let paramIndex = 1;
+  
+  if (status) {
+    conditions.push(`t.current_status = $${paramIndex}`);
+    params.push(status);
+    paramIndex++;
+  }
+  
+  if (customTimestamp) {
+    // Use date range to match the entire day (ignoring time)
+    const startOfDay = new Date(customTimestamp + 'T00:00:00Z');
+    const startOfNextDay = new Date(startOfDay);
+    startOfNextDay.setUTCDate(startOfNextDay.getUTCDate() + 1);
+    
+    conditions.push(`t.custom_timestamp >= $${paramIndex} AND t.custom_timestamp < $${paramIndex + 1}`);
+    params.push(startOfDay.toISOString(), startOfNextDay.toISOString());
+    paramIndex += 2;
+  }
+  
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
   
   // Get total count and stats (always get all stats, not filtered)
   const countResult = await pool.query(`
@@ -88,18 +109,22 @@ export async function getAllTrackingNumbers(
     total
   };
   
-  // Get filtered total count if status filter is applied
+  // Get filtered total count
   let filteredTotal = total;
-  if (status) {
+  if (conditions.length > 0) {
     const filteredCountResult = await pool.query(`
       SELECT COUNT(*) as total
-      FROM tracking_numbers
-      WHERE current_status = $1
-    `, [status]);
+      FROM tracking_numbers t
+      ${whereClause}
+    `, params);
     filteredTotal = parseInt(filteredCountResult.rows[0].total);
   }
   
-  // Get paginated data with optional status filter
+  // Build query params for main query
+  const queryParams = [limit, offset, ...params];
+  const limitOffsetIndex = queryParams.length - params.length;
+  
+  // Get paginated data with filters
   const result = await pool.query(`
     SELECT 
       t.*,
@@ -108,10 +133,10 @@ export async function getAllTrackingNumbers(
     FROM tracking_numbers t
     LEFT JOIN boxes b ON t.box_id = b.id
     LEFT JOIN postboxes p ON t.postbox_id = p.id
-    ${statusWhere}
+    ${whereClause}
     ORDER BY t.created_at DESC
-    LIMIT $1 OFFSET $2
-  `, status ? [limit, offset, status] : [limit, offset]);
+    LIMIT $${limitOffsetIndex} OFFSET $${limitOffsetIndex + 1}
+  `, queryParams);
   
   return {
     data: result.rows,
@@ -126,7 +151,8 @@ export async function getTrackingNumbersByBox(
   boxId: number,
   page: number = 1,
   limit: number = 50,
-  status?: TrackingStatus
+  status?: TrackingStatus,
+  customTimestamp?: string
 ): Promise<{ 
   data: TrackingNumberWithBox[]; 
   total: number; 
@@ -141,9 +167,29 @@ export async function getTrackingNumbersByBox(
 }> {
   const offset = (page - 1) * limit;
   
-  // Build WHERE clause for status filter
-  const statusCondition = status ? `AND t.current_status = $4` : '';
-  const queryParams = status ? [boxId, limit, offset, status] : [boxId, limit, offset];
+  // Build WHERE conditions
+  const conditions: string[] = [`t.box_id = $1`];
+  const params: any[] = [boxId];
+  let paramIndex = 2;
+  
+  if (status) {
+    conditions.push(`t.current_status = $${paramIndex}`);
+    params.push(status);
+    paramIndex++;
+  }
+  
+  if (customTimestamp) {
+    // Use date range to match the entire day (ignoring time)
+    const startOfDay = new Date(customTimestamp + 'T00:00:00Z');
+    const startOfNextDay = new Date(startOfDay);
+    startOfNextDay.setUTCDate(startOfNextDay.getUTCDate() + 1);
+    
+    conditions.push(`t.custom_timestamp >= $${paramIndex} AND t.custom_timestamp < $${paramIndex + 1}`);
+    params.push(startOfDay.toISOString(), startOfNextDay.toISOString());
+    paramIndex += 2;
+  }
+  
+  const whereClause = `WHERE ${conditions.join(' AND ')}`;
   
   // Get total count and stats for this box (always get all stats, not filtered)
   const countResult = await pool.query(`
@@ -163,18 +209,23 @@ export async function getTrackingNumbersByBox(
     total
   };
   
-  // Get filtered total count if status filter is applied
+  // Get filtered total count
   let filteredTotal = total;
-  if (status) {
+  if (conditions.length > 1) {
     const filteredCountResult = await pool.query(`
       SELECT COUNT(*) as total
-      FROM tracking_numbers
-      WHERE box_id = $1 AND current_status = $2
-    `, [boxId, status]);
+      FROM tracking_numbers t
+      ${whereClause}
+    `, params);
     filteredTotal = parseInt(filteredCountResult.rows[0].total);
   }
   
-  // Get paginated data with optional status filter
+  // Build query params for main query (limit and offset at the end)
+  const queryParams = [...params, limit, offset];
+  const limitIndex = queryParams.length - 1;
+  const offsetIndex = queryParams.length;
+  
+  // Get paginated data with filters
   const result = await pool.query(`
     SELECT 
       t.*,
@@ -183,9 +234,9 @@ export async function getTrackingNumbersByBox(
     FROM tracking_numbers t
     LEFT JOIN boxes b ON t.box_id = b.id
     LEFT JOIN postboxes p ON t.postbox_id = p.id
-    WHERE t.box_id = $1 ${statusCondition}
+    ${whereClause}
     ORDER BY t.created_at DESC
-    LIMIT $2 OFFSET $3
+    LIMIT $${limitIndex} OFFSET $${offsetIndex}
   `, queryParams);
   
   return {

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import './Layout.css';
@@ -9,34 +10,49 @@ interface LayoutProps {
 export default function Layout({ children }: LayoutProps) {
   const { user, logout } = useAuth();
   const location = useLocation();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
     <div className="layout">
       <nav className="navbar">
         <div className="nav-container">
-          <h1 className="nav-title">RM Tracking</h1>
-          <div className="nav-links">
+          <div className="nav-header">
+            <h1 className="nav-title">RM Tracking</h1>
+            <button 
+              className="mobile-menu-toggle"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label="Toggle menu"
+            >
+              <span></span>
+              <span></span>
+              <span></span>
+            </button>
+          </div>
+          <div className={`nav-links ${mobileMenuOpen ? 'mobile-open' : ''}`}>
             <Link
               to="/"
               className={location.pathname === '/' ? 'active' : ''}
+              onClick={() => setMobileMenuOpen(false)}
             >
               Dashboard
             </Link>
             <Link
               to="/add"
               className={location.pathname === '/add' ? 'active' : ''}
+              onClick={() => setMobileMenuOpen(false)}
             >
               Add Tracking
             </Link>
             <Link
               to="/analytics"
               className={location.pathname === '/analytics' ? 'active' : ''}
+              onClick={() => setMobileMenuOpen(false)}
             >
               Analytics
             </Link>
           </div>
-          <div className="nav-user">
-            <span>{user?.email}</span>
+          <div className={`nav-user ${mobileMenuOpen ? 'mobile-open' : ''}`}>
+            <span className="nav-user-email">{user?.email}</span>
             <button onClick={logout} className="logout-btn">
               Logout
             </button>

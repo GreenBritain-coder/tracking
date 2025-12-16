@@ -26,6 +26,7 @@ export default function Dashboard() {
   const [postboxes, setPostboxes] = useState<Postbox[]>([]);
   const [selectedBox, setSelectedBox] = useState<number | null>(null);
   const [selectedStatus, setSelectedStatus] = useState<'not_scanned' | 'scanned' | 'delivered' | null>(null);
+  const [selectedCustomTimestamp, setSelectedCustomTimestamp] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
@@ -49,13 +50,13 @@ export default function Dashboard() {
     // Refresh every 30 seconds
     const interval = setInterval(loadData, 30000);
     return () => clearInterval(interval);
-  }, [selectedBox, selectedStatus, currentPage, itemsPerPage]);
+  }, [selectedBox, selectedStatus, selectedCustomTimestamp, currentPage, itemsPerPage]);
 
   const loadData = async () => {
     try {
       setLoading(true);
       const [trackingRes, boxesRes, postboxesRes] = await Promise.all([
-        api.getTrackingNumbers(selectedBox || undefined, currentPage, itemsPerPage, selectedStatus || undefined),
+        api.getTrackingNumbers(selectedBox || undefined, currentPage, itemsPerPage, selectedStatus || undefined, selectedCustomTimestamp || undefined),
         api.getBoxes(),
         api.getPostboxes(),
       ]);
@@ -288,6 +289,17 @@ export default function Dashboard() {
               </select>
             </label>
             <label>
+              Filter by Custom Timestamp:
+              <input
+                type="date"
+                value={selectedCustomTimestamp || ''}
+                onChange={(e) => {
+                  setSelectedCustomTimestamp(e.target.value || null);
+                  setCurrentPage(1); // Reset to first page when filter changes
+                }}
+              />
+            </label>
+            <label>
               Items per page:
               <select
                 value={itemsPerPage}
@@ -428,7 +440,115 @@ export default function Dashboard() {
                 </td>
               </tr>
             ) : (
-              trackingNumbers.map((tn) => (
+              trackingNumbers.map((tn) => {
+                const renderTimestampEdit = () => (
+                  editingTrackingId === tn.id ? (
+                    <div className="timestamp-edit">
+                      <input
+                        type="date"
+                        value={customTimestamp || (tn.custom_timestamp ? new Date(tn.custom_timestamp).toISOString().slice(0, 10) : '')}
+                        onChange={(e) => setCustomTimestamp(e.target.value)}
+                        onPaste={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const pastedText = e.clipboardData.getData('text').trim();
+                          console.log('Pasted text:', pastedText);
+                          
+                          let parsedDate = '';
+                          let parsedTime = '00:00:00';
+                          
+                          const commaMatch = pastedText.match(/^(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})[,\s]+(\d{1,2}:\d{2}(?::\d{2})?)/);
+                          if (commaMatch) {
+                            const datePart = commaMatch[1];
+                            const timePart = commaMatch[2];
+                            const parts = datePart.split(/[\/\-]/);
+                            const day = parts[0].padStart(2, '0');
+                            const month = parts[1].padStart(2, '0');
+                            const year = parts[2];
+                            parsedDate = `${year}-${month}-${day}`;
+                            const timeParts = timePart.split(':');
+                            parsedTime = `${timeParts[0].padStart(2, '0')}:${(timeParts[1] || '00').padStart(2, '0')}:${(timeParts[2] || '00').padStart(2, '0')}`;
+                            console.log('Converted (comma format):', parsedDate, parsedTime);
+                          }
+                          else if (/^\d{4}-\d{2}-\d{2}(\s+\d{1,2}:\d{2}(?::\d{2})?)?$/.test(pastedText)) {
+                            const parts = pastedText.split(/\s+/);
+                            parsedDate = parts[0];
+                            if (parts[1]) {
+                              const timeParts = parts[1].split(':');
+                              parsedTime = `${timeParts[0].padStart(2, '0')}:${(timeParts[1] || '00').padStart(2, '0')}:${(timeParts[2] || '00').padStart(2, '0')}`;
+                            }
+                          } 
+                          else if (/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}(\s+\d{1,2}:\d{2}(?::\d{2})?)?$/.test(pastedText)) {
+                            const parts = pastedText.split(/\s+/);
+                            const datePart = parts[0];
+                            const dateParts = datePart.split(/[\/\-]/);
+                            const day = dateParts[0].padStart(2, '0');
+                            const month = dateParts[1].padStart(2, '0');
+                            const year = dateParts[2];
+                            parsedDate = `${year}-${month}-${day}`;
+                            if (parts[1]) {
+                              const timeParts = parts[1].split(':');
+                              parsedTime = `${timeParts[0].padStart(2, '0')}:${(timeParts[1] || '00').padStart(2, '0')}:${(timeParts[2] || '00').padStart(2, '0')}`;
+                            }
+                            console.log('Converted (UK format):', parsedDate, parsedTime);
+                          }
+                          else {
+                            const date = new Date(pastedText);
+                            if (!isNaN(date.getTime())) {
+                              parsedDate = date.toISOString().slice(0, 10);
+                              parsedTime = date.toISOString().slice(11, 19);
+                              console.log('Parsed via Date object:', parsedDate, parsedTime);
+                            }
+                          }
+                          
+                          if (parsedDate) {
+                            setTimeout(() => {
+                              setCustomTimestamp(parsedDate);
+                              const dateTimestamp = new Date(`${parsedDate}T${parsedTime}`).toISOString();
+                              handleStatusChange(tn.id, tn.current_status, tn.postbox_id, dateTimestamp);
+                            }, 0);
+                          } else {
+                            console.warn('Could not parse pasted date:', pastedText);
+                          }
+                        }}
+                        onBlur={() => {
+                          if (customTimestamp) {
+                            const dateTimestamp = customTimestamp ? new Date(customTimestamp + 'T00:00:00Z').toISOString() : null;
+                            handleStatusChange(tn.id, tn.current_status, tn.postbox_id, dateTimestamp);
+                          } else {
+                            setEditingTrackingId(null);
+                          }
+                        }}
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter' && customTimestamp) {
+                            const dateTimestamp = customTimestamp ? new Date(customTimestamp + 'T00:00:00Z').toISOString() : null;
+                            handleStatusChange(tn.id, tn.current_status, tn.postbox_id, dateTimestamp);
+                          } else if (e.key === 'Escape') {
+                            setEditingTrackingId(null);
+                            setCustomTimestamp('');
+                          }
+                        }}
+                        autoFocus
+                      />
+                    </div>
+                  ) : (
+                    <div className="timestamp-display">
+                      <span>{tn.custom_timestamp ? formatDate(tn.custom_timestamp) : '-'}</span>
+                      <button 
+                        onClick={() => {
+                          setEditingTrackingId(tn.id);
+                          setCustomTimestamp(tn.custom_timestamp ? new Date(tn.custom_timestamp).toISOString().slice(0, 10) : '');
+                        }}
+                        className="edit-timestamp-btn"
+                        title="Edit timestamp"
+                      >
+                        ✏️
+                      </button>
+                    </div>
+                  )
+                );
+
+                return (
                 <tr key={tn.id}>
                   <td>
                     <span
@@ -456,121 +576,7 @@ export default function Dashboard() {
                     </select>
                   </td>
                   <td>
-                    {editingTrackingId === tn.id ? (
-                      <div className="timestamp-edit">
-                        <input
-                          type="date"
-                          value={customTimestamp || (tn.custom_timestamp ? new Date(tn.custom_timestamp).toISOString().slice(0, 10) : '')}
-                          onChange={(e) => setCustomTimestamp(e.target.value)}
-                          onPaste={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            const pastedText = e.clipboardData.getData('text').trim();
-                            console.log('Pasted text:', pastedText); // Debug log
-                            
-                            // Try to parse the pasted text as a date with time
-                            let parsedDate = '';
-                            let parsedTime = '00:00:00'; // Default to midnight
-                            
-                            // Handle formats with comma: "12/09/2025, 01:00:00" or "12/09/2025,01:00:00"
-                            const commaMatch = pastedText.match(/^(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})[,\s]+(\d{1,2}:\d{2}(?::\d{2})?)/);
-                            if (commaMatch) {
-                              const datePart = commaMatch[1];
-                              const timePart = commaMatch[2];
-                              const parts = datePart.split(/[\/\-]/);
-                              const day = parts[0].padStart(2, '0');
-                              const month = parts[1].padStart(2, '0');
-                              const year = parts[2];
-                              parsedDate = `${year}-${month}-${day}`;
-                              // Normalize time format (ensure HH:MM:SS)
-                              const timeParts = timePart.split(':');
-                              parsedTime = `${timeParts[0].padStart(2, '0')}:${(timeParts[1] || '00').padStart(2, '0')}:${(timeParts[2] || '00').padStart(2, '0')}`;
-                              console.log('Converted (comma format):', parsedDate, parsedTime);
-                            }
-                            // Try ISO format first (YYYY-MM-DD or YYYY-MM-DD HH:MM)
-                            else if (/^\d{4}-\d{2}-\d{2}(\s+\d{1,2}:\d{2}(?::\d{2})?)?$/.test(pastedText)) {
-                              const parts = pastedText.split(/\s+/);
-                              parsedDate = parts[0];
-                              if (parts[1]) {
-                                const timeParts = parts[1].split(':');
-                                parsedTime = `${timeParts[0].padStart(2, '0')}:${(timeParts[1] || '00').padStart(2, '0')}:${(timeParts[2] || '00').padStart(2, '0')}`;
-                              }
-                            } 
-                            // Try DD/MM/YYYY HH:MM or DD/MM/YYYY (UK format with optional time)
-                            else if (/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}(\s+\d{1,2}:\d{2}(?::\d{2})?)?$/.test(pastedText)) {
-                              const parts = pastedText.split(/\s+/);
-                              const datePart = parts[0];
-                              const dateParts = datePart.split(/[\/\-]/);
-                              const day = dateParts[0].padStart(2, '0');
-                              const month = dateParts[1].padStart(2, '0');
-                              const year = dateParts[2];
-                              parsedDate = `${year}-${month}-${day}`;
-                              if (parts[1]) {
-                                const timeParts = parts[1].split(':');
-                                parsedTime = `${timeParts[0].padStart(2, '0')}:${(timeParts[1] || '00').padStart(2, '0')}:${(timeParts[2] || '00').padStart(2, '0')}`;
-                              }
-                              console.log('Converted (UK format):', parsedDate, parsedTime);
-                            }
-                            // Try to parse as Date object (handles various formats including with time)
-                            else {
-                              const date = new Date(pastedText);
-                              if (!isNaN(date.getTime())) {
-                                parsedDate = date.toISOString().slice(0, 10);
-                                parsedTime = date.toISOString().slice(11, 19);
-                                console.log('Parsed via Date object:', parsedDate, parsedTime);
-                              }
-                            }
-                            
-                            if (parsedDate) {
-                              // Use setTimeout to ensure React state update happens after browser validation
-                              setTimeout(() => {
-                                setCustomTimestamp(parsedDate);
-                                // Auto-save after paste with the correct time
-                                // Use local timezone for the time, then convert to UTC
-                                const dateTimestamp = new Date(`${parsedDate}T${parsedTime}`).toISOString();
-                                handleStatusChange(tn.id, tn.current_status, tn.postbox_id, dateTimestamp);
-                              }, 0);
-                            } else {
-                              console.warn('Could not parse pasted date:', pastedText);
-                            }
-                          }}
-                          onBlur={() => {
-                            if (customTimestamp) {
-                              // Convert date to ISO timestamp (midnight UTC)
-                              const dateTimestamp = customTimestamp ? new Date(customTimestamp + 'T00:00:00Z').toISOString() : null;
-                              handleStatusChange(tn.id, tn.current_status, tn.postbox_id, dateTimestamp);
-                            } else {
-                              setEditingTrackingId(null);
-                            }
-                          }}
-                          onKeyPress={(e) => {
-                            if (e.key === 'Enter' && customTimestamp) {
-                              // Convert date to ISO timestamp (midnight UTC)
-                              const dateTimestamp = customTimestamp ? new Date(customTimestamp + 'T00:00:00Z').toISOString() : null;
-                              handleStatusChange(tn.id, tn.current_status, tn.postbox_id, dateTimestamp);
-                            } else if (e.key === 'Escape') {
-                              setEditingTrackingId(null);
-                              setCustomTimestamp('');
-                            }
-                          }}
-                          autoFocus
-                        />
-                      </div>
-                    ) : (
-                      <div className="timestamp-display">
-                        <span>{tn.custom_timestamp ? formatDate(tn.custom_timestamp) : '-'}</span>
-                        <button 
-                          onClick={() => {
-                            setEditingTrackingId(tn.id);
-                            setCustomTimestamp(tn.custom_timestamp ? new Date(tn.custom_timestamp).toISOString().slice(0, 10) : '');
-                          }}
-                          className="edit-timestamp-btn"
-                          title="Edit timestamp"
-                        >
-                          ✏️
-                        </button>
-                      </div>
-                    )}
+                    {renderTimestampEdit()}
                   </td>
                   <td>{formatDate(tn.created_at)}</td>
                   <td>{formatDate(tn.updated_at)}</td>
@@ -611,10 +617,157 @@ export default function Dashboard() {
                     </div>
                   </td>
                 </tr>
-              ))
+                );
+              })
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile Card View */}
+      <div className="tracking-card">
+        {trackingNumbers.length === 0 ? (
+          <div className="empty-state">
+            No tracking numbers found
+          </div>
+        ) : (
+          trackingNumbers.map((tn) => {
+            const renderTimestampEdit = () => (
+              editingTrackingId === tn.id ? (
+                <div className="timestamp-edit">
+                  <input
+                    type="date"
+                    value={customTimestamp || (tn.custom_timestamp ? new Date(tn.custom_timestamp).toISOString().slice(0, 10) : '')}
+                    onChange={(e) => setCustomTimestamp(e.target.value)}
+                    onBlur={() => {
+                      if (customTimestamp) {
+                        const dateTimestamp = customTimestamp ? new Date(customTimestamp + 'T00:00:00Z').toISOString() : null;
+                        handleStatusChange(tn.id, tn.current_status, tn.postbox_id, dateTimestamp);
+                      } else {
+                        setEditingTrackingId(null);
+                      }
+                    }}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter' && customTimestamp) {
+                        const dateTimestamp = customTimestamp ? new Date(customTimestamp + 'T00:00:00Z').toISOString() : null;
+                        handleStatusChange(tn.id, tn.current_status, tn.postbox_id, dateTimestamp);
+                      } else if (e.key === 'Escape') {
+                        setEditingTrackingId(null);
+                        setCustomTimestamp('');
+                      }
+                    }}
+                    autoFocus
+                  />
+                </div>
+              ) : (
+                <div className="timestamp-display">
+                  <span>{tn.custom_timestamp ? formatDate(tn.custom_timestamp) : '-'}</span>
+                  <button 
+                    onClick={() => {
+                      setEditingTrackingId(tn.id);
+                      setCustomTimestamp(tn.custom_timestamp ? new Date(tn.custom_timestamp).toISOString().slice(0, 10) : '');
+                    }}
+                    className="edit-timestamp-btn"
+                    title="Edit timestamp"
+                  >
+                    ✏️
+                  </button>
+                </div>
+              )
+            );
+
+            return (
+              <div key={tn.id} className="tracking-card-item">
+                <div className="tracking-card-header">
+                  <div className="tracking-card-tracking-number">{tn.tracking_number}</div>
+                  <span
+                    className="status-badge"
+                    style={{ backgroundColor: STATUS_COLORS[tn.current_status] }}
+                  >
+                    {STATUS_EMOJIS[tn.current_status]} {STATUS_LABELS[tn.current_status]}
+                  </span>
+                </div>
+                <div className="tracking-card-details">
+                  {tn.status_details && (
+                    <div className="tracking-card-detail-row">
+                      <span className="tracking-card-detail-label">Status Details:</span>
+                      <span className="tracking-card-detail-value">{tn.status_details}</span>
+                    </div>
+                  )}
+                  <div className="tracking-card-detail-row">
+                    <span className="tracking-card-detail-label">Box:</span>
+                    <span className="tracking-card-detail-value">{tn.box_name || '-'}</span>
+                  </div>
+                  <div className="tracking-card-detail-row">
+                    <span className="tracking-card-detail-label">Postbox:</span>
+                    <select
+                      value={tn.postbox_id || ''}
+                      onChange={(e) => handlePostboxChange(tn.id, e.target.value ? parseInt(e.target.value) : null)}
+                      className="postbox-select"
+                      style={{ width: '100%', minHeight: '44px' }}
+                    >
+                      <option value="">-</option>
+                      {postboxes.map((postbox) => (
+                        <option key={postbox.id} value={postbox.id}>
+                          {postbox.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="tracking-card-detail-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '0.5rem' }}>
+                    <span className="tracking-card-detail-label">Custom Timestamp:</span>
+                    <div style={{ width: '100%' }}>{renderTimestampEdit()}</div>
+                  </div>
+                  <div className="tracking-card-detail-row">
+                    <span className="tracking-card-detail-label">Created:</span>
+                    <span className="tracking-card-detail-value">{formatDate(tn.created_at)}</span>
+                  </div>
+                  <div className="tracking-card-detail-row">
+                    <span className="tracking-card-detail-label">Updated:</span>
+                    <span className="tracking-card-detail-value">{formatDate(tn.updated_at)}</span>
+                  </div>
+                </div>
+                <div className="tracking-card-actions">
+                  <div className="action-buttons">
+                    <select
+                      value={tn.current_status}
+                      onChange={(e) => {
+                        const newStatus = e.target.value as 'not_scanned' | 'scanned' | 'delivered';
+                        if (editingTrackingId === tn.id && customTimestamp) {
+                          const dateTimestamp = customTimestamp ? new Date(customTimestamp + 'T00:00:00Z').toISOString() : null;
+                          handleStatusChange(tn.id, newStatus, tn.postbox_id, dateTimestamp);
+                        } else {
+                          handleStatusChange(tn.id, newStatus, tn.postbox_id, tn.custom_timestamp || null);
+                        }
+                      }}
+                      className="status-select"
+                      style={{ width: '100%', minHeight: '44px' }}
+                    >
+                      <option value="not_scanned">🔴 Not Scanned</option>
+                      <option value="scanned">🟡 Scanned</option>
+                      <option value="delivered">🟢 Delivered</option>
+                    </select>
+                    <button
+                      onClick={() => handleRefreshSingle(tn.id)}
+                      className="refresh-btn"
+                      title="Refresh this tracking number"
+                      style={{ width: '100%', minHeight: '44px' }}
+                    >
+                      🔄 Refresh
+                    </button>
+                    <button
+                      onClick={() => handleDelete(tn.id)}
+                      className="delete-btn"
+                      style={{ width: '100%', minHeight: '44px' }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
 
       {totalItems > itemsPerPage && (

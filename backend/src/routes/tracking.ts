@@ -80,15 +80,21 @@ router.get('/numbers', async (req: AuthRequest, res: Response) => {
     const page = req.query.page ? parseInt(req.query.page as string) : 1;
     const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
     const status = req.query.status as 'not_scanned' | 'scanned' | 'delivered' | undefined;
+    const customTimestamp = req.query.customTimestamp as string | undefined;
     
     // Validate status if provided
     if (status && !['not_scanned', 'scanned', 'delivered'].includes(status)) {
       return res.status(400).json({ error: 'Invalid status filter' });
     }
     
+    // Validate customTimestamp format if provided (should be YYYY-MM-DD)
+    if (customTimestamp && !/^\d{4}-\d{2}-\d{2}$/.test(customTimestamp)) {
+      return res.status(400).json({ error: 'Invalid customTimestamp format. Expected YYYY-MM-DD' });
+    }
+    
     const result = boxId
-      ? await getTrackingNumbersByBox(boxId, page, limit, status)
-      : await getAllTrackingNumbers(page, limit, status);
+      ? await getTrackingNumbersByBox(boxId, page, limit, status, customTimestamp)
+      : await getAllTrackingNumbers(page, limit, status, customTimestamp);
     res.json(result);
   } catch (error) {
     console.error('Error fetching tracking numbers:', error);

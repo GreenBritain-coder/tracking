@@ -18,3 +18,37 @@ code {
     monospace;
 }
 
+/* Mobile-friendly base styles */
+button,
+a,
+input,
+select,
+textarea {
+  min-height: 44px;
+  touch-action: manipulation;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
+}
+
+/* Ensure readable font sizes on mobile */
+@media (max-width: 480px) {
+  body {
+    font-size: 16px;
+  }
+
+  h1 {
+    font-size: 1.75rem;
+  }
+
+  h2 {
+    font-size: 1.5rem;
+  }
+
+  h3 {
+    font-size: 1.25rem;
+  }
+}
+
