@@ -208,7 +208,6 @@ export default function Dashboard() {
             onClick={handleRefresh}
             disabled={refreshing}
             className="refresh-btn"
-            style={{ marginRight: '10px', padding: '8px 16px', cursor: refreshing ? 'not-allowed' : 'pointer' }}
           >
             {refreshing ? 'Refreshing...' : '🔄 Refresh All Statuses'}
           </button>
@@ -223,68 +222,69 @@ export default function Dashboard() {
           >
             📮 Manage Postboxes
           </button>
-          <div className="filter-controls">
-            <label>
-              Filter by Box:
-              <select
-                value={selectedBox || ''}
-                onChange={(e) => {
-                  setSelectedBox(e.target.value ? parseInt(e.target.value) : null);
-                  setCurrentPage(1); // Reset to first page when filter changes
-                }}
-              >
-                <option value="">All Boxes</option>
-                {boxes.map((box) => (
-                  <option key={box.id} value={box.id}>
-                    {box.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Filter by Status:
-              <select
-                value={selectedStatus || ''}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setSelectedStatus(value ? value as 'not_scanned' | 'scanned' | 'delivered' : null);
-                  setCurrentPage(1); // Reset to first page when filter changes
-                }}
-              >
-                <option value="">All Statuses</option>
-                <option value="not_scanned">🔴 Not Scanned ({stats.not_scanned})</option>
-                <option value="scanned">🟡 Scanned ({stats.scanned})</option>
-                <option value="delivered">🟢 Delivered ({stats.delivered})</option>
-              </select>
-            </label>
-            <label>
-              Filter by Custom Timestamp:
-              <input
-                type="date"
-                value={selectedCustomTimestamp || ''}
-                onChange={(e) => {
-                  setSelectedCustomTimestamp(e.target.value || null);
-                  setCurrentPage(1); // Reset to first page when filter changes
-                }}
-              />
-            </label>
-            <label>
-              Items per page:
-              <select
-                value={itemsPerPage}
-                onChange={(e) => {
-                  setItemsPerPage(parseInt(e.target.value));
-                  setCurrentPage(1); // Reset to first page when page size changes
-                }}
-              >
-                <option value="25">25</option>
-                <option value="50">50</option>
-                <option value="100">100</option>
-                <option value="200">200</option>
-              </select>
-            </label>
-          </div>
         </div>
+      </div>
+
+      <div className="filter-controls">
+        <label>
+          Filter by Box:
+          <select
+            value={selectedBox || ''}
+            onChange={(e) => {
+              setSelectedBox(e.target.value ? parseInt(e.target.value) : null);
+              setCurrentPage(1); // Reset to first page when filter changes
+            }}
+          >
+            <option value="">All Boxes</option>
+            {boxes.map((box) => (
+              <option key={box.id} value={box.id}>
+                {box.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Filter by Status:
+          <select
+            value={selectedStatus || ''}
+            onChange={(e) => {
+              const value = e.target.value;
+              setSelectedStatus(value ? value as 'not_scanned' | 'scanned' | 'delivered' : null);
+              setCurrentPage(1); // Reset to first page when filter changes
+            }}
+          >
+            <option value="">All Statuses</option>
+            <option value="not_scanned">🔴 Not Scanned ({stats.not_scanned})</option>
+            <option value="scanned">🟡 Scanned ({stats.scanned})</option>
+            <option value="delivered">🟢 Delivered ({stats.delivered})</option>
+          </select>
+        </label>
+        <label>
+          Filter by Custom Timestamp:
+          <input
+            type="date"
+            value={selectedCustomTimestamp || ''}
+            onChange={(e) => {
+              setSelectedCustomTimestamp(e.target.value || null);
+              setCurrentPage(1); // Reset to first page when filter changes
+            }}
+          />
+        </label>
+        <label>
+          Items per page:
+          <select
+            value={itemsPerPage}
+            onChange={(e) => {
+              setItemsPerPage(parseInt(e.target.value));
+              setCurrentPage(1); // Reset to first page when page size changes
+            }}
+          >
+            <option value="25">25</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+            <option value="200">200</option>
+          </select>
+        </label>
       </div>
 
       {error && <div className="error-banner">{error}</div>}
