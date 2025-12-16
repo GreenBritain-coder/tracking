@@ -147,6 +147,12 @@
   color: #2c3e50;
 }
 
+.box-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .delete-box-btn {
   background-color: #e74c3c;
   color: white;
@@ -176,7 +182,6 @@
   cursor: pointer;
   font-size: 0.9rem;
   transition: background-color 0.2s;
-  margin-right: 0.5rem;
 }
 
 .edit-box-btn:hover {

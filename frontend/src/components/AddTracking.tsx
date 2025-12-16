@@ -254,19 +254,21 @@ export default function AddTracking() {
                   ) : (
                     <>
                       <span className="box-name">{box.name}</span>
-                      <button
-                        onClick={() => setEditingBox(box)}
-                        className="edit-box-btn"
-                      >
-                        ✏️ Edit
-                      </button>
-                      <button
-                        onClick={() => handleDeleteBox(box.id, box.name)}
-                        disabled={deletingBoxId === box.id}
-                        className="delete-box-btn"
-                      >
-                        {deletingBoxId === box.id ? 'Deleting...' : 'Delete'}
-                      </button>
+                      <div className="box-item-actions">
+                        <button
+                          onClick={() => setEditingBox(box)}
+                          className="edit-box-btn"
+                        >
+                          ✏️ Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeleteBox(box.id, box.name)}
+                          disabled={deletingBoxId === box.id}
+                          className="delete-box-btn"
+                        >
+                          {deletingBoxId === box.id ? 'Deleting...' : 'Delete'}
+                        </button>
+                      </div>
                     </>
                   )}
                 </div>
