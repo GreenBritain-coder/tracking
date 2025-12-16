@@ -51,8 +51,7 @@ export default function Layout({ children }: LayoutProps) {
               Analytics
             </Link>
           </div>
-          <div className={`nav-user ${mobileMenuOpen ? 'mobile-open' : ''}`}>
-            <span className="nav-user-email">{user?.email}</span>
+          <div className={`nav-actions ${mobileMenuOpen ? 'mobile-open' : ''}`}>
             <button onClick={logout} className="logout-btn">
               Logout
             </button>
