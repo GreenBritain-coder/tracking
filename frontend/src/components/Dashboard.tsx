@@ -248,9 +248,13 @@ export default function Dashboard() {
             🗑️ Delete All Entries
           </button>
           <button
-            onClick={() => setShowPostboxManager(!showPostboxManager)}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setShowPostboxManager(!showPostboxManager);
+            }}
             className="postbox-manager-btn"
-            style={{ marginRight: '10px', padding: '8px 16px', cursor: 'pointer' }}
+            type="button"
           >
             📮 Manage Postboxes
           </button>
