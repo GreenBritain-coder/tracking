@@ -166,7 +166,7 @@
   white-space: nowrap;
 }
 
-.box-name, .postbox-name {
+.box-name {
   max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;

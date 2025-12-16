@@ -4,6 +4,7 @@ export interface Box {
   id: number;
   name: string;
   created_at: Date;
+  updated_at?: Date;
 }
 
 export async function createBox(name: string): Promise<Box> {
@@ -21,6 +22,17 @@ export async function getAllBoxes(): Promise<Box[]> {
 
 export async function getBoxById(id: number): Promise<Box | null> {
   const result = await pool.query('SELECT * FROM boxes WHERE id = $1', [id]);
+  return result.rows[0] || null;
+}
+
+export async function updateBox(id: number, name: string): Promise<Box | null> {
+  const result = await pool.query(
+    `UPDATE boxes 
+     SET name = $1, updated_at = CURRENT_TIMESTAMP 
+     WHERE id = $2 
+     RETURNING *`,
+    [name, id]
+  );
   return result.rows[0] || null;
 }
 

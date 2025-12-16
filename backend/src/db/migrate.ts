@@ -17,8 +17,22 @@ async function migrate() {
       CREATE TABLE IF NOT EXISTS boxes (
         id SERIAL PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
+    `);
+
+    // Add updated_at column to boxes if it doesn't exist
+    await pool.query(`
+      DO $$ 
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name='boxes' AND column_name='updated_at'
+        ) THEN
+          ALTER TABLE boxes ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+        END IF;
+      END $$;
     `);
 
     // Create postboxes table
@@ -103,6 +117,13 @@ async function migrate() {
       CREATE INDEX IF NOT EXISTS idx_tracking_numbers_status ON tracking_numbers(current_status);
       CREATE INDEX IF NOT EXISTS idx_status_history_tracking_id ON status_history(tracking_number_id);
       CREATE INDEX IF NOT EXISTS idx_status_history_timestamp ON status_history(timestamp);
+    `);
+
+    // Nullify postbox_id in tracking_numbers (migrate away from postboxes)
+    await pool.query(`
+      UPDATE tracking_numbers 
+      SET postbox_id = NULL 
+      WHERE postbox_id IS NOT NULL
     `);
 
     console.log('Database migration completed successfully');

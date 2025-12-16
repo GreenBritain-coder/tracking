@@ -35,7 +35,6 @@ export interface StatusChangeLog {
   new_status: string;
   status_details: string | null;
   box_name: string | null;
-  postbox_name: string | null;
   changed_at: Date;
   change_type: 'status_change' | 'details_update';
 }
@@ -49,7 +48,6 @@ export async function getRecentStatusChanges(limit: number = 50): Promise<Status
       sh.status as new_status,
       t.status_details,
       b.name as box_name,
-      p.name as postbox_name,
       sh.timestamp as changed_at,
       CASE
         WHEN lag(sh.status) OVER (PARTITION BY sh.tracking_number_id ORDER BY sh.timestamp) != sh.status THEN 'status_change'
@@ -58,7 +56,6 @@ export async function getRecentStatusChanges(limit: number = 50): Promise<Status
     FROM status_history sh
     JOIN tracking_numbers t ON sh.tracking_number_id = t.id
     LEFT JOIN boxes b ON t.box_id = b.id
-    LEFT JOIN postboxes p ON t.postbox_id = p.id
     ORDER BY sh.timestamp DESC
     LIMIT $1
   `, [limit]);

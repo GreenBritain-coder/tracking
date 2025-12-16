@@ -6,27 +6,19 @@ export interface Box {
   id: number;
   name: string;
   created_at: string;
+  updated_at?: string;
 }
 
 export interface TrackingNumber {
   id: number;
   tracking_number: string;
   box_id: number | null;
-  postbox_id: number | null;
   current_status: 'not_scanned' | 'scanned' | 'delivered';
   status_details?: string | null;
   custom_timestamp?: string | null;
   created_at: string;
   updated_at: string;
   box_name?: string | null;
-  postbox_name?: string | null;
-}
-
-export interface Postbox {
-  id: number;
-  name: string;
-  created_at: string;
-  updated_at: string;
 }
 
 export interface StatusChangeLog {
@@ -36,7 +28,6 @@ export interface StatusChangeLog {
   new_status: string;
   status_details: string | null;
   box_name: string | null;
-  postbox_name: string | null;
   changed_at: string;
   change_type: 'status_change' | 'details_update';
 }
@@ -45,6 +36,7 @@ export const api = {
   // Boxes
   getBoxes: () => axios.get<Box[]>(`${API_URL}/tracking/boxes`),
   createBox: (name: string) => axios.post<Box>(`${API_URL}/tracking/boxes`, { name }),
+  updateBox: (id: number, name: string) => axios.patch<Box>(`${API_URL}/tracking/boxes/${id}`, { name }),
   deleteBox: (id: number) => axios.delete(`${API_URL}/tracking/boxes/${id}`),
 
   // Tracking Numbers
@@ -73,12 +65,11 @@ export const api = {
       tracking_number: trackingNumber,
       box_id: boxId,
     }),
-  bulkCreateTrackingNumbers: (trackingNumbers: string[], boxId?: number, customTimestamp?: string | null, postboxId?: number | null) =>
+  bulkCreateTrackingNumbers: (trackingNumbers: string[], boxId?: number, customTimestamp?: string | null) =>
     axios.post(`${API_URL}/tracking/numbers/bulk`, {
       tracking_numbers: trackingNumbers,
       box_id: boxId,
       custom_timestamp: customTimestamp,
-      postbox_id: postboxId,
     }),
   deleteTrackingNumber: (id: number) =>
     axios.delete(`${API_URL}/tracking/numbers/${id}`),
@@ -87,20 +78,12 @@ export const api = {
   updateTrackingStatus: (
     id: number, 
     status: 'not_scanned' | 'scanned' | 'delivered',
-    postboxId?: number | null,
     customTimestamp?: string | null
   ) =>
     axios.patch<TrackingNumber>(`${API_URL}/tracking/numbers/${id}/status`, { 
       status,
-      postbox_id: postboxId,
       custom_timestamp: customTimestamp
     }),
-
-  // Postboxes
-  getPostboxes: () => axios.get<Postbox[]>(`${API_URL}/tracking/postboxes`),
-  createPostbox: (name: string) => axios.post<Postbox>(`${API_URL}/tracking/postboxes`, { name }),
-  updatePostbox: (id: number, name: string) => axios.patch<Postbox>(`${API_URL}/tracking/postboxes/${id}`, { name }),
-  deletePostbox: (id: number) => axios.delete(`${API_URL}/tracking/postboxes/${id}`),
 
   // Analytics
   getBoxAnalytics: () => axios.get(`${API_URL}/analytics/boxes`),

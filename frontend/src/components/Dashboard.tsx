@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, TrackingNumber, Box, Postbox } from '../api/api';
+import { api, TrackingNumber, Box } from '../api/api';
 import './Dashboard.css';
 
 const STATUS_COLORS = {
@@ -23,16 +23,12 @@ const STATUS_LABELS = {
 export default function Dashboard() {
   const [trackingNumbers, setTrackingNumbers] = useState<TrackingNumber[]>([]);
   const [boxes, setBoxes] = useState<Box[]>([]);
-  const [postboxes, setPostboxes] = useState<Postbox[]>([]);
   const [selectedBox, setSelectedBox] = useState<number | null>(null);
   const [selectedStatus, setSelectedStatus] = useState<'not_scanned' | 'scanned' | 'delivered' | null>(null);
   const [selectedCustomTimestamp, setSelectedCustomTimestamp] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
-  const [showPostboxManager, setShowPostboxManager] = useState(false);
-  const [editingPostbox, setEditingPostbox] = useState<Postbox | null>(null);
-  const [newPostboxName, setNewPostboxName] = useState('');
   const [editingTrackingId, setEditingTrackingId] = useState<number | null>(null);
   const [customTimestamp, setCustomTimestamp] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -55,16 +51,14 @@ export default function Dashboard() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [trackingRes, boxesRes, postboxesRes] = await Promise.all([
+      const [trackingRes, boxesRes] = await Promise.all([
         api.getTrackingNumbers(selectedBox || undefined, currentPage, itemsPerPage, selectedStatus || undefined, selectedCustomTimestamp || undefined),
         api.getBoxes(),
-        api.getPostboxes(),
       ]);
       setTrackingNumbers(trackingRes.data.data);
       setTotalItems(trackingRes.data.total);
       setStats(trackingRes.data.stats);
       setBoxes(boxesRes.data);
-      setPostboxes(postboxesRes.data);
       setError('');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to load data');
@@ -119,65 +113,16 @@ export default function Dashboard() {
   const handleStatusChange = async (
     id: number, 
     newStatus: 'not_scanned' | 'scanned' | 'delivered',
-    postboxId?: number | null,
     timestamp?: string | null
   ) => {
     try {
-      await api.updateTrackingStatus(id, newStatus, postboxId, timestamp);
+      await api.updateTrackingStatus(id, newStatus, timestamp);
       // Reload data to show updated status
       loadData();
       setEditingTrackingId(null);
       setCustomTimestamp('');
     } catch (err: any) {
       alert(err.response?.data?.error || 'Failed to update status');
-    }
-  };
-
-  const handlePostboxChange = async (id: number, postboxId: number | null) => {
-    const tracking = trackingNumbers.find(t => t.id === id);
-    if (!tracking) return;
-    
-    await handleStatusChange(
-      id, 
-      tracking.current_status, 
-      postboxId,
-      tracking.custom_timestamp || null
-    );
-  };
-
-  const handlePostboxCreate = async () => {
-    if (!newPostboxName.trim()) {
-      alert('Please enter a postbox name');
-      return;
-    }
-    try {
-      await api.createPostbox(newPostboxName.trim());
-      setNewPostboxName('');
-      loadData();
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to create postbox');
-    }
-  };
-
-  const handlePostboxUpdate = async (id: number, name: string) => {
-    try {
-      await api.updatePostbox(id, name);
-      setEditingPostbox(null);
-      loadData();
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to update postbox');
-    }
-  };
-
-  const handlePostboxDelete = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this postbox? This will remove it from all tracking numbers.')) {
-      return;
-    }
-    try {
-      await api.deletePostbox(id);
-      loadData();
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to delete postbox');
     }
   };
 
@@ -210,17 +155,6 @@ export default function Dashboard() {
             className="refresh-btn"
           >
             {refreshing ? 'Refreshing...' : '🔄 Refresh All Statuses'}
-          </button>
-          <button
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setShowPostboxManager(!showPostboxManager);
-            }}
-            className="postbox-manager-btn"
-            type="button"
-          >
-            📮 Manage Postboxes
           </button>
         </div>
       </div>
@@ -333,59 +267,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      {showPostboxManager && (
-        <div className="postbox-manager">
-          <div className="postbox-manager-header">
-            <h3>📮 Manage Postboxes</h3>
-            <button onClick={() => setShowPostboxManager(false)}>✕ Close</button>
-          </div>
-          <div className="postbox-manager-content">
-            <div className="postbox-create">
-              <input
-                type="text"
-                placeholder="New postbox name..."
-                value={newPostboxName}
-                onChange={(e) => setNewPostboxName(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handlePostboxCreate()}
-              />
-              <button onClick={handlePostboxCreate}>Add Postbox</button>
-            </div>
-            <div className="postbox-list">
-              {postboxes.map((postbox) => (
-                <div key={postbox.id} className="postbox-item">
-                  {editingPostbox?.id === postbox.id ? (
-                    <>
-                      <input
-                        type="text"
-                        value={editingPostbox.name}
-                        onChange={(e) => setEditingPostbox({ ...editingPostbox, name: e.target.value })}
-                        onKeyPress={(e) => {
-                          if (e.key === 'Enter') {
-                            handlePostboxUpdate(editingPostbox.id, editingPostbox.name);
-                          } else if (e.key === 'Escape') {
-                            setEditingPostbox(null);
-                          }
-                        }}
-                        autoFocus
-                      />
-                      <button onClick={() => handlePostboxUpdate(editingPostbox.id, editingPostbox.name)}>✓</button>
-                      <button onClick={() => setEditingPostbox(null)}>✕</button>
-                    </>
-                  ) : (
-                    <>
-                      <span>{postbox.name}</span>
-                      <button onClick={() => setEditingPostbox(postbox)}>✏️ Edit</button>
-                      <button onClick={() => handlePostboxDelete(postbox.id)}>🗑️ Delete</button>
-                    </>
-                  )}
-                </div>
-              ))}
-              {postboxes.length === 0 && <p>No postboxes yet. Create one above.</p>}
-            </div>
-          </div>
-        </div>
-      )}
-
       <div className="tracking-table-container">
         <table className="tracking-table">
           <thead>
@@ -394,7 +275,6 @@ export default function Dashboard() {
               <th>Status Details</th>
               <th>Tracking Number</th>
               <th>Box</th>
-              <th>Postbox</th>
               <th>Custom Timestamp</th>
               <th>Created</th>
               <th>Updated</th>
@@ -404,7 +284,7 @@ export default function Dashboard() {
           <tbody>
             {trackingNumbers.length === 0 ? (
               <tr>
-                <td colSpan={9} className="empty-state">
+                <td colSpan={8} className="empty-state">
                   No tracking numbers found
                 </td>
               </tr>
@@ -474,7 +354,7 @@ export default function Dashboard() {
                             setTimeout(() => {
                               setCustomTimestamp(parsedDate);
                               const dateTimestamp = new Date(`${parsedDate}T${parsedTime}`).toISOString();
-                              handleStatusChange(tn.id, tn.current_status, tn.postbox_id, dateTimestamp);
+                              handleStatusChange(tn.id, tn.current_status, dateTimestamp);
                             }, 0);
                           } else {
                             console.warn('Could not parse pasted date:', pastedText);
@@ -483,7 +363,7 @@ export default function Dashboard() {
                         onBlur={() => {
                           if (customTimestamp) {
                             const dateTimestamp = customTimestamp ? new Date(customTimestamp + 'T00:00:00Z').toISOString() : null;
-                            handleStatusChange(tn.id, tn.current_status, tn.postbox_id, dateTimestamp);
+                            handleStatusChange(tn.id, tn.current_status, dateTimestamp);
                           } else {
                             setEditingTrackingId(null);
                           }
@@ -491,7 +371,7 @@ export default function Dashboard() {
                         onKeyPress={(e) => {
                           if (e.key === 'Enter' && customTimestamp) {
                             const dateTimestamp = customTimestamp ? new Date(customTimestamp + 'T00:00:00Z').toISOString() : null;
-                            handleStatusChange(tn.id, tn.current_status, tn.postbox_id, dateTimestamp);
+                            handleStatusChange(tn.id, tn.current_status, dateTimestamp);
                           } else if (e.key === 'Escape') {
                             setEditingTrackingId(null);
                             setCustomTimestamp('');
@@ -531,20 +411,6 @@ export default function Dashboard() {
                   <td className="tracking-number">{tn.tracking_number}</td>
                   <td>{tn.box_name || '-'}</td>
                   <td>
-                    <select
-                      value={tn.postbox_id || ''}
-                      onChange={(e) => handlePostboxChange(tn.id, e.target.value ? parseInt(e.target.value) : null)}
-                      className="postbox-select"
-                    >
-                      <option value="">-</option>
-                      {postboxes.map((postbox) => (
-                        <option key={postbox.id} value={postbox.id}>
-                          {postbox.name}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td>
                     {renderTimestampEdit()}
                   </td>
                   <td>{formatDate(tn.created_at)}</td>
@@ -558,9 +424,9 @@ export default function Dashboard() {
                           if (editingTrackingId === tn.id && customTimestamp) {
                             // Convert date to ISO timestamp (midnight UTC)
                             const dateTimestamp = customTimestamp ? new Date(customTimestamp + 'T00:00:00Z').toISOString() : null;
-                            handleStatusChange(tn.id, newStatus, tn.postbox_id, dateTimestamp);
+                            handleStatusChange(tn.id, newStatus, dateTimestamp);
                           } else {
-                            handleStatusChange(tn.id, newStatus, tn.postbox_id, tn.custom_timestamp || null);
+                            handleStatusChange(tn.id, newStatus, tn.custom_timestamp || null);
                           }
                         }}
                         className="status-select"
@@ -611,7 +477,7 @@ export default function Dashboard() {
                     onBlur={() => {
                       if (customTimestamp) {
                         const dateTimestamp = customTimestamp ? new Date(customTimestamp + 'T00:00:00Z').toISOString() : null;
-                        handleStatusChange(tn.id, tn.current_status, tn.postbox_id, dateTimestamp);
+                        handleStatusChange(tn.id, tn.current_status, dateTimestamp);
                       } else {
                         setEditingTrackingId(null);
                       }
@@ -619,7 +485,7 @@ export default function Dashboard() {
                     onKeyPress={(e) => {
                       if (e.key === 'Enter' && customTimestamp) {
                         const dateTimestamp = customTimestamp ? new Date(customTimestamp + 'T00:00:00Z').toISOString() : null;
-                        handleStatusChange(tn.id, tn.current_status, tn.postbox_id, dateTimestamp);
+                        handleStatusChange(tn.id, tn.current_status, dateTimestamp);
                       } else if (e.key === 'Escape') {
                         setEditingTrackingId(null);
                         setCustomTimestamp('');
@@ -667,22 +533,6 @@ export default function Dashboard() {
                     <span className="tracking-card-detail-label">Box:</span>
                     <span className="tracking-card-detail-value">{tn.box_name || '-'}</span>
                   </div>
-                  <div className="tracking-card-detail-row">
-                    <span className="tracking-card-detail-label">Postbox:</span>
-                    <select
-                      value={tn.postbox_id || ''}
-                      onChange={(e) => handlePostboxChange(tn.id, e.target.value ? parseInt(e.target.value) : null)}
-                      className="postbox-select"
-                      style={{ width: '100%', minHeight: '44px' }}
-                    >
-                      <option value="">-</option>
-                      {postboxes.map((postbox) => (
-                        <option key={postbox.id} value={postbox.id}>
-                          {postbox.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
                   <div className="tracking-card-detail-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '0.5rem' }}>
                     <span className="tracking-card-detail-label">Custom Timestamp:</span>
                     <div style={{ width: '100%' }}>{renderTimestampEdit()}</div>
@@ -704,9 +554,9 @@ export default function Dashboard() {
                         const newStatus = e.target.value as 'not_scanned' | 'scanned' | 'delivered';
                         if (editingTrackingId === tn.id && customTimestamp) {
                           const dateTimestamp = customTimestamp ? new Date(customTimestamp + 'T00:00:00Z').toISOString() : null;
-                          handleStatusChange(tn.id, newStatus, tn.postbox_id, dateTimestamp);
+                          handleStatusChange(tn.id, newStatus, dateTimestamp);
                         } else {
-                          handleStatusChange(tn.id, newStatus, tn.postbox_id, tn.custom_timestamp || null);
+                          handleStatusChange(tn.id, newStatus, tn.custom_timestamp || null);
                         }
                       }}
                       className="status-select"

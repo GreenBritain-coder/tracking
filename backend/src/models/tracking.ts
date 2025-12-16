@@ -6,7 +6,6 @@ export interface TrackingNumber {
   id: number;
   tracking_number: string;
   box_id: number | null;
-  postbox_id: number | null;
   current_status: TrackingStatus;
   status_details: string | null;
   custom_timestamp: Date | null;
@@ -16,7 +15,6 @@ export interface TrackingNumber {
 
 export interface TrackingNumberWithBox extends TrackingNumber {
   box_name: string | null;
-  postbox_name: string | null;
 }
 
 export async function createTrackingNumber(
@@ -130,10 +128,8 @@ export async function getAllTrackingNumbers(
     SELECT
       t.*,
       b.name as box_name,
-      p.name as postbox_name
     FROM tracking_numbers t
     LEFT JOIN boxes b ON t.box_id = b.id
-    LEFT JOIN postboxes p ON t.postbox_id = p.id
     ${whereClause}
     ORDER BY t.created_at DESC
     LIMIT $${limitParamIndex} OFFSET $${offsetParamIndex}
@@ -231,10 +227,8 @@ export async function getTrackingNumbersByBox(
     SELECT
       t.*,
       b.name as box_name,
-      p.name as postbox_name
     FROM tracking_numbers t
     LEFT JOIN boxes b ON t.box_id = b.id
-    LEFT JOIN postboxes p ON t.postbox_id = p.id
     ${whereClause}
     ORDER BY t.created_at DESC
     LIMIT $${limitParamIndex} OFFSET $${offsetParamIndex}
@@ -263,7 +257,6 @@ export async function updateTrackingStatus(
   id: number,
   status: TrackingStatus,
   statusDetails?: string,
-  postboxId?: number | null,
   customTimestamp?: Date | null
 ): Promise<TrackingNumber | null> {
   const client = await pool.connect();
@@ -296,12 +289,11 @@ export async function updateTrackingStatus(
         `UPDATE tracking_numbers
          SET current_status = $1,
              status_details = $2,
-             postbox_id = $3,
-             custom_timestamp = $4,
+             custom_timestamp = $3,
              updated_at = CURRENT_TIMESTAMP
-         WHERE id = $5
+         WHERE id = $4
          RETURNING *`,
-        [status, statusDetails || null, postboxId ?? null, customTimestamp, id]
+        [status, statusDetails || null, customTimestamp, id]
       );
     } else {
       // Update without changing custom_timestamp (preserve existing value)
@@ -309,11 +301,10 @@ export async function updateTrackingStatus(
         `UPDATE tracking_numbers
          SET current_status = $1,
              status_details = $2,
-             postbox_id = $3,
              updated_at = CURRENT_TIMESTAMP
-         WHERE id = $4
+         WHERE id = $3
          RETURNING *`,
-        [status, statusDetails || null, postboxId ?? null, id]
+        [status, statusDetails || null, id]
       );
     }
 
@@ -362,8 +353,7 @@ export async function deleteAllTrackingNumbers(): Promise<number> {
 export async function bulkCreateTrackingNumbers(
   trackingNumbers: string[],
   boxId: number | null = null,
-  customTimestamp: Date | null = null,
-  postboxId: number | null = null
+  customTimestamp: Date | null = null
 ): Promise<TrackingNumber[]> {
   const results: TrackingNumber[] = [];
   const client = await pool.connect();
@@ -372,17 +362,17 @@ export async function bulkCreateTrackingNumbers(
     await client.query('BEGIN');
     
     for (const tn of trackingNumbers) {
-      console.log(`Inserting tracking number: ${tn.trim()}, customTimestamp: ${customTimestamp}, postboxId: ${postboxId}, type: ${typeof customTimestamp}`);
+      console.log(`Inserting tracking number: ${tn.trim()}, customTimestamp: ${customTimestamp}, type: ${typeof customTimestamp}`);
       const result = await client.query(
-        `INSERT INTO tracking_numbers (tracking_number, box_id, current_status, custom_timestamp, postbox_id)
-         VALUES ($1, $2, 'not_scanned', $3, $4)
+        `INSERT INTO tracking_numbers (tracking_number, box_id, current_status, custom_timestamp)
+         VALUES ($1, $2, 'not_scanned', $3)
          ON CONFLICT (tracking_number) DO NOTHING
          RETURNING *`,
-        [tn.trim(), boxId, customTimestamp, postboxId]
+        [tn.trim(), boxId, customTimestamp]
       );
       
       if (result.rows.length > 0) {
-        console.log(`Created tracking number ${tn.trim()} with custom_timestamp: ${result.rows[0].custom_timestamp}, postbox_id: ${result.rows[0].postbox_id}`);
+        console.log(`Created tracking number ${tn.trim()} with custom_timestamp: ${result.rows[0].custom_timestamp}`);
         results.push(result.rows[0]);
         // Create initial status history entry
         await client.query(

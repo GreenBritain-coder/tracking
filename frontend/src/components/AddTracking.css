@@ -167,6 +167,55 @@
   cursor: not-allowed;
 }
 
+.edit-box-btn {
+  background-color: #3498db;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background-color 0.2s;
+  margin-right: 0.5rem;
+}
+
+.edit-box-btn:hover {
+  background-color: #2980b9;
+}
+
+.box-edit-input {
+  flex: 1;
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.save-box-btn,
+.cancel-box-btn {
+  background-color: #27ae60;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background-color 0.2s;
+  margin-left: 0.5rem;
+}
+
+.save-box-btn:hover {
+  background-color: #229954;
+}
+
+.cancel-box-btn {
+  background-color: #95a5a6;
+}
+
+.cancel-box-btn:hover {
+  background-color: #7f8c8d;
+}
+
 .mode-selector {
   display: flex;
   gap: 1rem;

@@ -100,7 +100,6 @@ export default function Logs() {
                 <th>Status Change</th>
                 <th>Details</th>
                 <th>Box</th>
-                <th>Postbox</th>
               </tr>
             </thead>
             <tbody>
@@ -138,9 +137,6 @@ export default function Logs() {
                   </td>
                   <td className="box-name">
                     {log.box_name || <em>(none)</em>}
-                  </td>
-                  <td className="postbox-name">
-                    {log.postbox_name || <em>(none)</em>}
                   </td>
                 </tr>
               ))}

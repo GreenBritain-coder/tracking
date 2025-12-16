@@ -11,14 +11,7 @@ import {
   bulkCreateTrackingNumbers,
   deleteAllTrackingNumbers,
 } from '../models/tracking';
-import { createBox, getAllBoxes, getBoxById, deleteBox } from '../models/box';
-import { 
-  getAllPostboxes, 
-  createPostbox, 
-  updatePostbox, 
-  deletePostbox,
-  getPostboxById 
-} from '../models/postbox';
+import { createBox, getAllBoxes, getBoxById, updateBox, deleteBox } from '../models/box';
 import { getStatusHistory, getRecentStatusChanges } from '../models/statusHistory';
 import { updateAllTrackingStatuses } from '../services/scheduler';
 import { checkRoyalMailStatus } from '../services/scraper';
@@ -54,6 +47,30 @@ router.post(
       res.status(201).json(box);
     } catch (error) {
       console.error('Error creating box:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
+
+router.patch(
+  '/boxes/:id',
+  [body('name').notEmpty().trim()],
+  async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    try {
+      const { id } = req.params;
+      const { name } = req.body;
+      const box = await updateBox(Number(id), name);
+      if (!box) {
+        return res.status(404).json({ error: 'Box not found' });
+      }
+      res.json(box);
+    } catch (error) {
+      console.error('Error updating box:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   }
@@ -156,20 +173,6 @@ router.post(
     body('tracking_numbers').isArray().notEmpty(),
     body('tracking_numbers.*').isString().trim().notEmpty(),
     body('box_id').optional().isInt(),
-    body('postbox_id')
-      .optional({ nullable: true, checkFalsy: true })
-      .custom((value) => {
-        // If value is null, undefined, or empty string, it's valid
-        if (value === null || value === undefined || value === '') {
-          return true;
-        }
-        // Otherwise, it must be a valid integer
-        const num = typeof value === 'string' ? parseInt(value, 10) : Number(value);
-        if (isNaN(num) || !Number.isInteger(num)) {
-          throw new Error('postbox_id must be a valid integer or null');
-        }
-        return true;
-      }),
     body('custom_timestamp')
       .optional({ nullable: true, checkFalsy: true })
       .custom((value) => {
@@ -193,12 +196,11 @@ router.post(
     }
 
     try {
-      const { tracking_numbers, box_id, postbox_id, custom_timestamp } = req.body;
+      const { tracking_numbers, box_id, custom_timestamp } = req.body;
       
       console.log('Bulk import request:', {
         tracking_numbers_count: tracking_numbers?.length,
         box_id,
-        postbox_id,
         custom_timestamp,
         custom_timestamp_type: typeof custom_timestamp
       });
@@ -211,31 +213,10 @@ router.post(
         }
       }
       
-      // Validate postbox exists if provided
-      if (postbox_id !== undefined && postbox_id !== null && postbox_id !== '') {
-        const postboxIdNum = typeof postbox_id === 'string' ? parseInt(postbox_id) : postbox_id;
-        if (!isNaN(postboxIdNum)) {
-          const postbox = await getPostboxById(postboxIdNum);
-          if (!postbox) {
-            return res.status(404).json({ error: 'Postbox not found' });
-          }
-        }
-      }
-      
-      // Normalize postbox_id: convert empty string to null, ensure it's a number or null
-      let normalizedPostboxId: number | null = null;
-      if (postbox_id !== undefined && postbox_id !== null && postbox_id !== '') {
-        const postboxIdNum = typeof postbox_id === 'string' ? parseInt(postbox_id) : postbox_id;
-        if (!isNaN(postboxIdNum)) {
-          normalizedPostboxId = postboxIdNum;
-        }
-      }
-      
       const created = await bulkCreateTrackingNumbers(
         tracking_numbers, 
         box_id || null,
-        custom_timestamp || null,
-        normalizedPostboxId
+        custom_timestamp || null
       );
       
       console.log('Bulk import result:', {
@@ -338,20 +319,6 @@ router.patch(
   '/numbers/:id/status',
   [
     body('status').isIn(['not_scanned', 'scanned', 'delivered']),
-    body('postbox_id')
-      .optional({ nullable: true, checkFalsy: true })
-      .custom((value) => {
-        // If value is null, undefined, or empty string, it's valid
-        if (value === null || value === undefined || value === '') {
-          return true;
-        }
-        // Otherwise, it must be a valid integer
-        const num = typeof value === 'string' ? parseInt(value, 10) : Number(value);
-        if (isNaN(num) || !Number.isInteger(num)) {
-          throw new Error('postbox_id must be a valid integer or null');
-        }
-        return true;
-      }),
     body('custom_timestamp').optional({ nullable: true, checkFalsy: true }).isISO8601().toDate(),
   ],
   async (req: AuthRequest, res: Response) => {
@@ -364,40 +331,19 @@ router.patch(
 
     try {
       const { id } = req.params;
-      const { status, postbox_id, custom_timestamp } = req.body;
+      const { status, custom_timestamp } = req.body;
       
-      console.log(`Updating tracking ${id}: status=${status}, postbox_id=${postbox_id} (type: ${typeof postbox_id}), custom_timestamp=${custom_timestamp}`);
+      console.log(`Updating tracking ${id}: status=${status}, custom_timestamp=${custom_timestamp}`);
       
       const tracking = await getTrackingNumberById(Number(id));
       if (!tracking) {
         return res.status(404).json({ error: 'Tracking number not found' });
       }
 
-      // Validate postbox_id if provided (and not null/empty)
-      if (postbox_id !== undefined && postbox_id !== null && postbox_id !== '') {
-        const postboxIdNum = typeof postbox_id === 'string' ? parseInt(postbox_id) : postbox_id;
-        if (!isNaN(postboxIdNum)) {
-          const postbox = await getPostboxById(postboxIdNum);
-          if (!postbox) {
-            return res.status(400).json({ error: 'Postbox not found' });
-          }
-        }
-      }
-
-      // Normalize postbox_id: convert empty string to null, ensure it's a number or null
-      let normalizedPostboxId: number | null = null;
-      if (postbox_id !== undefined && postbox_id !== null && postbox_id !== '') {
-        const postboxIdNum = typeof postbox_id === 'string' ? parseInt(postbox_id) : postbox_id;
-        if (!isNaN(postboxIdNum)) {
-          normalizedPostboxId = postboxIdNum;
-        }
-      }
-
       await updateTrackingStatus(
         Number(id), 
         status, 
         undefined, 
-        normalizedPostboxId,
         custom_timestamp || null
       );
       
@@ -412,75 +358,6 @@ router.patch(
     }
   }
 );
-
-// Postboxes endpoints
-router.get('/postboxes', async (req: AuthRequest, res: Response) => {
-  try {
-    const postboxes = await getAllPostboxes();
-    res.json(postboxes);
-  } catch (error) {
-    console.error('Error fetching postboxes:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-router.post(
-  '/postboxes',
-  [body('name').notEmpty().trim()],
-  async (req: AuthRequest, res: Response) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    try {
-      const { name } = req.body;
-      const postbox = await createPostbox(name);
-      res.status(201).json(postbox);
-    } catch (error) {
-      console.error('Error creating postbox:', error);
-      res.status(500).json({ error: 'Internal server error' });
-    }
-  }
-);
-
-router.patch(
-  '/postboxes/:id',
-  [body('name').notEmpty().trim()],
-  async (req: AuthRequest, res: Response) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    try {
-      const { id } = req.params;
-      const { name } = req.body;
-      const postbox = await updatePostbox(Number(id), name);
-      if (!postbox) {
-        return res.status(404).json({ error: 'Postbox not found' });
-      }
-      res.json(postbox);
-    } catch (error) {
-      console.error('Error updating postbox:', error);
-      res.status(500).json({ error: 'Internal server error' });
-    }
-  }
-);
-
-router.delete('/postboxes/:id', async (req: AuthRequest, res: Response) => {
-  try {
-    const { id } = req.params;
-    const deleted = await deletePostbox(Number(id));
-    if (!deleted) {
-      return res.status(404).json({ error: 'Postbox not found' });
-    }
-    res.json({ message: 'Postbox deleted successfully' });
-  } catch (error) {
-    console.error('Error deleting postbox:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
 
 // Logs endpoints
 router.get('/logs/status-changes', async (req: AuthRequest, res: Response) => {

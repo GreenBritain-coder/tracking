@@ -1,12 +1,10 @@
 import { useState, useEffect } from 'react';
-import { api, Box, Postbox } from '../api/api';
+import { api, Box } from '../api/api';
 import './AddTracking.css';
 
 export default function AddTracking() {
   const [boxes, setBoxes] = useState<Box[]>([]);
-  const [postboxes, setPostboxes] = useState<Postbox[]>([]);
   const [selectedBox, setSelectedBox] = useState<number | null>(null);
-  const [selectedPostbox, setSelectedPostbox] = useState<number | null>(null);
   const [newBoxName, setNewBoxName] = useState('');
   const [showNewBox, setShowNewBox] = useState(false);
   const [trackingNumber, setTrackingNumber] = useState('');
@@ -17,10 +15,10 @@ export default function AddTracking() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [showBoxManagement, setShowBoxManagement] = useState(false);
   const [deletingBoxId, setDeletingBoxId] = useState<number | null>(null);
+  const [editingBox, setEditingBox] = useState<{ id: number; name: string } | null>(null);
 
   useEffect(() => {
     loadBoxes();
-    loadPostboxes();
   }, []);
 
   const loadBoxes = async () => {
@@ -29,15 +27,6 @@ export default function AddTracking() {
       setBoxes(response.data);
     } catch (error) {
       console.error('Failed to load boxes:', error);
-    }
-  };
-
-  const loadPostboxes = async () => {
-    try {
-      const response = await api.getPostboxes();
-      setPostboxes(response.data);
-    } catch (error) {
-      console.error('Failed to load postboxes:', error);
     }
   };
 
@@ -81,6 +70,25 @@ export default function AddTracking() {
       });
     } finally {
       setDeletingBoxId(null);
+    }
+  };
+
+  const handleUpdateBox = async (boxId: number, newName: string) => {
+    if (!newName.trim()) {
+      setEditingBox(null);
+      return;
+    }
+
+    try {
+      const response = await api.updateBox(boxId, newName.trim());
+      setBoxes(boxes.map(box => box.id === boxId ? response.data : box));
+      setEditingBox(null);
+      setMessage({ type: 'success', text: 'Box updated successfully' });
+    } catch (error: any) {
+      setMessage({
+        type: 'error',
+        text: error.response?.data?.error || 'Failed to update box',
+      });
     }
   };
 
@@ -133,12 +141,10 @@ export default function AddTracking() {
       const response = await api.bulkCreateTrackingNumbers(
         numbers,
         selectedBox || undefined,
-        customTimestamp,
-        selectedPostbox || undefined
+        customTimestamp
       );
       setBulkTrackingNumbers('');
       setBulkCustomTimestamp('');
-      setSelectedPostbox(null);
       setMessage({
         type: 'success',
         text: `Successfully added ${response.data.tracking_numbers.length} tracking numbers`,
@@ -216,14 +222,53 @@ export default function AddTracking() {
             ) : (
               boxes.map((box) => (
                 <div key={box.id} className="box-item">
-                  <span className="box-name">{box.name}</span>
-                  <button
-                    onClick={() => handleDeleteBox(box.id, box.name)}
-                    disabled={deletingBoxId === box.id}
-                    className="delete-box-btn"
-                  >
-                    {deletingBoxId === box.id ? 'Deleting...' : 'Delete'}
-                  </button>
+                  {editingBox?.id === box.id ? (
+                    <>
+                      <input
+                        type="text"
+                        value={editingBox.name}
+                        onChange={(e) => setEditingBox({ ...editingBox, name: e.target.value })}
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter') {
+                            handleUpdateBox(editingBox.id, editingBox.name);
+                          } else if (e.key === 'Escape') {
+                            setEditingBox(null);
+                          }
+                        }}
+                        autoFocus
+                        className="box-edit-input"
+                      />
+                      <button
+                        onClick={() => handleUpdateBox(editingBox.id, editingBox.name)}
+                        className="save-box-btn"
+                      >
+                        ✓
+                      </button>
+                      <button
+                        onClick={() => setEditingBox(null)}
+                        className="cancel-box-btn"
+                      >
+                        ✕
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="box-name">{box.name}</span>
+                      <button
+                        onClick={() => setEditingBox(box)}
+                        className="edit-box-btn"
+                      >
+                        ✏️ Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteBox(box.id, box.name)}
+                        disabled={deletingBoxId === box.id}
+                        className="delete-box-btn"
+                      >
+                        {deletingBoxId === box.id ? 'Deleting...' : 'Delete'}
+                      </button>
+                    </>
+                  )}
                 </div>
               ))
             )}
@@ -277,26 +322,6 @@ export default function AddTracking() {
               rows={10}
               required
             />
-          </div>
-          <div className="form-group">
-            <label htmlFor="bulk-postbox">
-              Postbox (optional)
-            </label>
-            <select
-              id="bulk-postbox"
-              value={selectedPostbox || ''}
-              onChange={(e) =>
-                setSelectedPostbox(e.target.value ? parseInt(e.target.value) : null)
-              }
-            >
-              <option value="">No Postbox</option>
-              {postboxes.map((postbox) => (
-                <option key={postbox.id} value={postbox.id}>
-                  {postbox.name}
-                </option>
-              ))}
-            </select>
-            <small>If provided, this postbox will be applied to all tracking numbers in this bulk import.</small>
           </div>
           <div className="form-group">
             <label htmlFor="bulk-custom-timestamp">
