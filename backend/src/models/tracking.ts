@@ -127,7 +127,7 @@ export async function getAllTrackingNumbers(
   const result = await pool.query(`
     SELECT
       t.*,
-      b.name as box_name,
+      b.name as box_name
     FROM tracking_numbers t
     LEFT JOIN boxes b ON t.box_id = b.id
     ${whereClause}
@@ -226,7 +226,7 @@ export async function getTrackingNumbersByBox(
   const result = await pool.query(`
     SELECT
       t.*,
-      b.name as box_name,
+      b.name as box_name
     FROM tracking_numbers t
     LEFT JOIN boxes b ON t.box_id = b.id
     ${whereClause}
