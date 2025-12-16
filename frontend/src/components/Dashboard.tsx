@@ -95,26 +95,6 @@ export default function Dashboard() {
     }
   };
 
-  const handleDeleteAll = async () => {
-    const confirmMessage = `⚠️ WARNING: This will delete ALL ${stats.total} tracking numbers. This action cannot be undone!\n\nType "DELETE ALL" to confirm:`;
-    const userInput = prompt(confirmMessage);
-    
-    if (userInput !== 'DELETE ALL') {
-      return;
-    }
-
-    if (!confirm(`Are you absolutely sure you want to delete ALL ${stats.total} tracking numbers? This cannot be undone!`)) {
-      return;
-    }
-
-    try {
-      const response = await api.deleteAllTrackingNumbers();
-      alert(response.data.message || 'All tracking numbers deleted successfully');
-      loadData();
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to delete all tracking numbers');
-    }
-  };
 
   const handleRefresh = async () => {
     if (!confirm('This will refresh all tracking statuses. This may take a few minutes. Continue?')) {
@@ -231,21 +211,6 @@ export default function Dashboard() {
             style={{ marginRight: '10px', padding: '8px 16px', cursor: refreshing ? 'not-allowed' : 'pointer' }}
           >
             {refreshing ? 'Refreshing...' : '🔄 Refresh All Statuses'}
-          </button>
-          <button
-            onClick={handleDeleteAll}
-            className="delete-all-btn"
-            style={{ 
-              marginRight: '10px', 
-              padding: '8px 16px', 
-              cursor: 'pointer',
-              backgroundColor: '#e74c3c',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px'
-            }}
-          >
-            🗑️ Delete All Entries
           </button>
           <button
             onClick={(e) => {
