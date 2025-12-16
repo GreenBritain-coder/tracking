@@ -50,6 +50,13 @@ export default function Layout({ children }: LayoutProps) {
             >
               Analytics
             </Link>
+            <Link
+              to="/logs"
+              className={location.pathname === '/logs' ? 'active' : ''}
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Logs
+            </Link>
           </div>
           <div className={`nav-actions ${mobileMenuOpen ? 'mobile-open' : ''}`}>
             <button onClick={logout} className="logout-btn">

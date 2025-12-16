@@ -4,6 +4,7 @@ import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import AddTracking from './components/AddTracking';
 import Analytics from './components/Analytics';
+import Logs from './components/Logs';
 import Layout from './components/Layout';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -46,6 +47,16 @@ function AppRoutes() {
           <PrivateRoute>
             <Layout>
               <Analytics />
+            </Layout>
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/logs"
+        element={
+          <PrivateRoute>
+            <Layout>
+              <Logs />
             </Layout>
           </PrivateRoute>
         }

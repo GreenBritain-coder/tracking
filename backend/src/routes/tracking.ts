@@ -19,7 +19,7 @@ import {
   deletePostbox,
   getPostboxById 
 } from '../models/postbox';
-import { getStatusHistory } from '../models/statusHistory';
+import { getStatusHistory, getRecentStatusChanges } from '../models/statusHistory';
 import { updateAllTrackingStatuses } from '../services/scheduler';
 import { checkRoyalMailStatus } from '../services/scraper';
 
@@ -478,6 +478,18 @@ router.delete('/postboxes/:id', async (req: AuthRequest, res: Response) => {
     res.json({ message: 'Postbox deleted successfully' });
   } catch (error) {
     console.error('Error deleting postbox:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Logs endpoints
+router.get('/logs/status-changes', async (req: AuthRequest, res: Response) => {
+  try {
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
+    const logs = await getRecentStatusChanges(Math.min(limit, 200)); // Max 200 entries
+    res.json(logs);
+  } catch (error) {
+    console.error('Error fetching status change logs:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

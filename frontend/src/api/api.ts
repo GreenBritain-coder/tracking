@@ -29,6 +29,18 @@ export interface Postbox {
   updated_at: string;
 }
 
+export interface StatusChangeLog {
+  id: number;
+  tracking_number: string;
+  old_status: string | null;
+  new_status: string;
+  status_details: string | null;
+  box_name: string | null;
+  postbox_name: string | null;
+  changed_at: string;
+  change_type: 'status_change' | 'details_update';
+}
+
 export const api = {
   // Boxes
   getBoxes: () => axios.get<Box[]>(`${API_URL}/tracking/boxes`),
@@ -100,5 +112,11 @@ export const api = {
   refreshTrackingStatuses: () => axios.post(`${API_URL}/tracking/refresh`),
   refreshTrackingNumber: (id: number) =>
     axios.post<{ message: string; tracking: TrackingNumber }>(`${API_URL}/tracking/numbers/${id}/refresh`),
+
+  // Logs
+  getStatusChangeLogs: (limit?: number) =>
+    axios.get<StatusChangeLog[]>(`${API_URL}/tracking/logs/status-changes`, {
+      params: limit ? { limit } : {}
+    }),
 };
 

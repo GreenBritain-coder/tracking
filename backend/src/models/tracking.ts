@@ -269,51 +269,77 @@ export async function updateTrackingStatus(
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    
+
+    // Get current tracking number info for logging
+    const currentInfo = await client.query(
+      'SELECT tracking_number, current_status, status_details FROM tracking_numbers WHERE id = $1',
+      [id]
+    );
+
+    if (currentInfo.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+
+    const currentTrackingNumber = currentInfo.rows[0];
+    const oldStatus = currentTrackingNumber.current_status;
+    const oldStatusDetails = currentTrackingNumber.status_details;
+
     // If customTimestamp is undefined, preserve the existing value
     // Only update custom_timestamp if it's explicitly provided (including null to clear it)
     const shouldUpdateCustomTimestamp = customTimestamp !== undefined;
-    
+
     let updateResult;
     if (shouldUpdateCustomTimestamp) {
       // Update including custom_timestamp
       updateResult = await client.query(
-        `UPDATE tracking_numbers 
-         SET current_status = $1, 
-             status_details = $2, 
+        `UPDATE tracking_numbers
+         SET current_status = $1,
+             status_details = $2,
              postbox_id = $3,
              custom_timestamp = $4,
-             updated_at = CURRENT_TIMESTAMP 
-         WHERE id = $5 
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $5
          RETURNING *`,
         [status, statusDetails || null, postboxId ?? null, customTimestamp, id]
       );
     } else {
       // Update without changing custom_timestamp (preserve existing value)
       updateResult = await client.query(
-        `UPDATE tracking_numbers 
-         SET current_status = $1, 
-             status_details = $2, 
+        `UPDATE tracking_numbers
+         SET current_status = $1,
+             status_details = $2,
              postbox_id = $3,
-             updated_at = CURRENT_TIMESTAMP 
-         WHERE id = $4 
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $4
          RETURNING *`,
         [status, statusDetails || null, postboxId ?? null, id]
       );
     }
-    
+
     if (updateResult.rows.length === 0) {
       await client.query('ROLLBACK');
       return null;
     }
-    
+
     // Add to status history
     await client.query(
       'INSERT INTO status_history (tracking_number_id, status) VALUES ($1, $2)',
       [id, status]
     );
-    
+
     await client.query('COMMIT');
+
+    // Log the status change
+    const trackingNumber = updateResult.rows[0].tracking_number;
+    const timestamp = new Date().toISOString();
+
+    if (oldStatus !== status) {
+      console.log(`[${timestamp}] STATUS_CHANGE: ${trackingNumber} - ${oldStatus} → ${status}${statusDetails ? ` (${statusDetails})` : ''}`);
+    } else if (oldStatusDetails !== (statusDetails || null)) {
+      console.log(`[${timestamp}] DETAILS_UPDATE: ${trackingNumber} - Status details updated: "${oldStatusDetails || '(empty)'}" → "${statusDetails || '(empty)'}"`);
+    }
+
     return updateResult.rows[0];
   } catch (error) {
     await client.query('ROLLBACK');
