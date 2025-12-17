@@ -88,7 +88,8 @@ export default function Dashboard() {
         selectedStatus || undefined,
         selectedCustomTimestamp || undefined,
         searchTerm || undefined,
-        selectedBox === -1 // unassignedOnly flag
+        selectedBox === -1, // unassignedOnly flag
+        selectedKingBox || undefined // kingBoxId filter
       );
       setTrackingNumbers(trackingRes.data.data);
       setTotalItems(trackingRes.data.total);

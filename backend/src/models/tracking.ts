@@ -55,7 +55,8 @@ export async function getAllTrackingNumbers(
   status?: TrackingStatus,
   customTimestamp?: string,
   search?: string,
-  unassignedOnly?: boolean
+  unassignedOnly?: boolean,
+  kingBoxId?: number | null
 ): Promise<{ 
   data: TrackingNumberWithBox[]; 
   total: number; 
@@ -101,6 +102,13 @@ export async function getAllTrackingNumbers(
 
   if (unassignedOnly) {
     conditions.push(`t.box_id IS NULL`);
+  }
+
+  // Filter by king box: show tracking numbers from all boxes that belong to this king box
+  if (kingBoxId !== undefined && kingBoxId !== null) {
+    conditions.push(`t.box_id IN (SELECT id FROM boxes WHERE parent_box_id = $${paramIndex})`);
+    queryParams.push(kingBoxId);
+    paramIndex++;
   }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';

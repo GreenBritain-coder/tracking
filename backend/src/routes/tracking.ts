@@ -175,6 +175,7 @@ router.get('/numbers', async (req: AuthRequest, res: Response) => {
     const search = req.query.search as string | undefined;
     const trackingNumberSearch = req.query.trackingNumber as string | undefined;
     const unassignedOnly = req.query.unassignedOnly === 'true';
+    const kingBoxId = req.query.kingBoxId ? parseInt(req.query.kingBoxId as string) : undefined;
     
     // Validate status if provided
     if (status && !['not_scanned', 'scanned', 'delivered'].includes(status)) {
@@ -186,9 +187,11 @@ router.get('/numbers', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'Invalid customTimestamp format. Expected YYYY-MM-DD' });
     }
     
+    // If boxId is specified, use getTrackingNumbersByBox (takes precedence)
+    // Otherwise, use getAllTrackingNumbers with optional kingBoxId filter
     const result = boxId
       ? await getTrackingNumbersByBox(boxId, page, limit, status, customTimestamp, search || trackingNumberSearch)
-      : await getAllTrackingNumbers(page, limit, status, customTimestamp, search || trackingNumberSearch, unassignedOnly);
+      : await getAllTrackingNumbers(page, limit, status, customTimestamp, search || trackingNumberSearch, unassignedOnly, kingBoxId || null);
     res.json(result);
   } catch (error) {
     console.error('Error fetching tracking numbers:', error);
