@@ -89,8 +89,15 @@ function mapDeliveryStatus(deliveryStatus: string | null | undefined): TrackingS
  */
 function extractStatusHeader(webhookData: any): string | undefined {
   // Try multiple possible fields for status description
+  // latest_event is an object, extract description if it exists
+  if (webhookData.latest_event) {
+    if (typeof webhookData.latest_event === 'string') {
+      return webhookData.latest_event;
+    } else if (webhookData.latest_event.description) {
+      return webhookData.latest_event.description;
+    }
+  }
   return (
-    webhookData.latest_event ||
     webhookData.delivery_status ||
     webhookData.substatus ||
     webhookData.status_info ||
@@ -219,13 +226,26 @@ router.post('/trackingmore', async (req: any, res: Response) => {
     const deliveryStatus = trackingData.delivery_status;
     const statusHeader = extractStatusHeader(trackingData);
     
-    // Get the most detailed TrackingMore status - priority: latest_event > delivery_status > other fields
-    const trackingmoreStatus = trackingData.latest_event || 
-                                trackingData.delivery_status || 
-                                trackingData.status || 
-                                trackingData.sub_status ||
-                                trackingData.substatus ||
-                                deliveryStatus;
+    // Get the most detailed TrackingMore status
+    // latest_event is an object with description, time_iso, location - extract description
+    let trackingmoreStatus: string | undefined;
+    if (trackingData.latest_event) {
+      // latest_event is an object, extract the description or stringify it
+      if (typeof trackingData.latest_event === 'string') {
+        trackingmoreStatus = trackingData.latest_event;
+      } else if (trackingData.latest_event.description) {
+        trackingmoreStatus = trackingData.latest_event.description;
+      } else {
+        // If it's an object without description, stringify it
+        trackingmoreStatus = JSON.stringify(trackingData.latest_event);
+      }
+    } else {
+      trackingmoreStatus = trackingData.delivery_status || 
+                          trackingData.status || 
+                          trackingData.sub_status ||
+                          trackingData.substatus ||
+                          deliveryStatus;
+    }
 
     console.log(`[${trackingNumber}] Webhook update: delivery_status=${deliveryStatus}, statusHeader=${statusHeader}, trackingmoreStatus=${trackingmoreStatus}`);
 

@@ -59,13 +59,26 @@ function parseTrackingMoreResponse(data: any, trackingNumber: string): {
     const statusLower = statusText.toLowerCase();
     
     // Get the raw TrackingMore status - try multiple fields to get the most detailed status
-    // Priority: latest_event (most detailed) > delivery_status > status > sub_status
-    const trackingmoreStatus = trackingData?.latest_event || 
-                                trackingData?.delivery_status || 
-                                trackingData?.status || 
-                                trackingData?.sub_status ||
-                                trackingData?.substatus ||
-                                undefined;
+    // latest_event is an object with description, time_iso, location - extract description
+    // Priority: latest_event.description (most detailed) > delivery_status > status > sub_status
+    let trackingmoreStatus: string | undefined;
+    if (trackingData?.latest_event) {
+      // latest_event is an object, extract the description or stringify it
+      if (typeof trackingData.latest_event === 'string') {
+        trackingmoreStatus = trackingData.latest_event;
+      } else if (trackingData.latest_event.description) {
+        trackingmoreStatus = trackingData.latest_event.description;
+      } else {
+        // If it's an object without description, stringify it
+        trackingmoreStatus = JSON.stringify(trackingData.latest_event);
+      }
+    } else {
+      trackingmoreStatus = trackingData?.delivery_status || 
+                          trackingData?.status || 
+                          trackingData?.sub_status ||
+                          trackingData?.substatus ||
+                          undefined;
+    }
     
     // Extract status header/description
     const statusHeader = trackingData?.delivery_status ||
