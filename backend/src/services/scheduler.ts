@@ -50,11 +50,13 @@ export async function updateAllTrackingStatuses() {
         const result = await checkRoyalMailStatus(tn.tracking_number);
         
         // Update if status changed OR if status_details is missing/empty but we have a statusHeader
+        // OR if trackingmore_status changed
         const statusChanged = result.status !== tn.current_status;
         const needsStatusDetails = (!tn.status_details || tn.status_details === '-') && result.statusHeader;
         const statusDetailsChanged = result.statusHeader && result.statusHeader !== tn.status_details;
+        const trackingmoreStatusChanged = result.trackingmoreStatus && result.trackingmoreStatus !== tn.trackingmore_status;
         
-        if (statusChanged || needsStatusDetails || statusDetailsChanged) {
+        if (statusChanged || needsStatusDetails || statusDetailsChanged || trackingmoreStatusChanged) {
           // Store the statusHeader (like "We've got it") in the status_details field
           // isManual=false for automatic updates
           await updateTrackingStatus(tn.id, result.status, result.statusHeader, undefined, false, result.trackingmoreStatus);
