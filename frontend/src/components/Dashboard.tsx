@@ -177,7 +177,7 @@ export default function Dashboard() {
       </div>
 
       <div className="filter-controls">
-        <label style={{ flex: '1 1 300px', minWidth: '250px' }}>
+        <label className="search-tracking-label">
           <span style={{ marginBottom: '0.5rem', display: 'block', fontWeight: 600, color: '#2c3e50' }}>
             🔍 Search Tracking Number
           </span>
