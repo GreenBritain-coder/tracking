@@ -218,8 +218,16 @@ router.post('/trackingmore', async (req: any, res: Response) => {
     const trackingNumber = trackingData.tracking_number;
     const deliveryStatus = trackingData.delivery_status;
     const statusHeader = extractStatusHeader(trackingData);
+    
+    // Get the most detailed TrackingMore status - priority: latest_event > delivery_status > other fields
+    const trackingmoreStatus = trackingData.latest_event || 
+                                trackingData.delivery_status || 
+                                trackingData.status || 
+                                trackingData.sub_status ||
+                                trackingData.substatus ||
+                                deliveryStatus;
 
-    console.log(`[${trackingNumber}] Webhook update: delivery_status=${deliveryStatus}, statusHeader=${statusHeader}`);
+    console.log(`[${trackingNumber}] Webhook update: delivery_status=${deliveryStatus}, statusHeader=${statusHeader}, trackingmoreStatus=${trackingmoreStatus}`);
 
     // Find tracking in database
     const tracking = await getTrackingNumberByTrackingNumber(trackingNumber);
@@ -242,12 +250,14 @@ router.post('/trackingmore', async (req: any, res: Response) => {
     // Map delivery_status to our TrackingStatus enum
     const mappedStatus = mapDeliveryStatus(deliveryStatus);
 
-    // Only update if status changed or statusHeader is different
-    if (mappedStatus !== tracking.current_status || statusHeader !== tracking.status_details) {
-      await updateTrackingStatus(tracking.id, mappedStatus, statusHeader, undefined, false, deliveryStatus);
+    // Only update if status changed or statusHeader is different or trackingmoreStatus changed
+    const trackingmoreStatusChanged = trackingmoreStatus && trackingmoreStatus !== tracking.trackingmore_status;
+    if (mappedStatus !== tracking.current_status || statusHeader !== tracking.status_details || trackingmoreStatusChanged) {
+      await updateTrackingStatus(tracking.id, mappedStatus, statusHeader, undefined, false, trackingmoreStatus);
       console.log(
         `[${trackingNumber}] Webhook updated: ${tracking.current_status} -> ${mappedStatus}`,
-        statusHeader ? `Header: ${statusHeader}` : ''
+        statusHeader ? `Header: ${statusHeader}` : '',
+        trackingmoreStatus ? `TrackingMore Status: ${trackingmoreStatus}` : ''
       );
     } else {
       console.log(`[${trackingNumber}] Webhook received but no changes detected`);

@@ -58,8 +58,14 @@ function parseTrackingMoreResponse(data: any, trackingNumber: string): {
                       '';
     const statusLower = statusText.toLowerCase();
     
-    // Get the raw TrackingMore delivery_status for storage
-    const trackingmoreStatus = trackingData?.delivery_status || undefined;
+    // Get the raw TrackingMore status - try multiple fields to get the most detailed status
+    // Priority: latest_event (most detailed) > delivery_status > status > sub_status
+    const trackingmoreStatus = trackingData?.latest_event || 
+                                trackingData?.delivery_status || 
+                                trackingData?.status || 
+                                trackingData?.sub_status ||
+                                trackingData?.substatus ||
+                                undefined;
     
     // Extract status header/description
     const statusHeader = trackingData?.delivery_status ||
