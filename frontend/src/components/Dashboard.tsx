@@ -53,8 +53,10 @@ export default function Dashboard() {
   }, [selectedBox, selectedStatus, selectedCustomTimestamp, searchTerm, currentPage, itemsPerPage, selectedKingBox]);
 
   useEffect(() => {
-    // Reset selected box when king box changes
-    setSelectedBox(null);
+    // Reset selected box when king box changes (but keep unassigned filter if set)
+    if (selectedBox !== -1) {
+      setSelectedBox(null);
+    }
     loadBoxes();
   }, [selectedKingBox]);
 
