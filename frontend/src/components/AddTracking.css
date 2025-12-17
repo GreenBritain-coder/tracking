@@ -110,6 +110,7 @@
   flex-direction: column;
   gap: 0.25rem;
   flex: 1;
+  align-items: flex-start;
 }
 
 .box-parent-badge {
@@ -123,6 +124,7 @@
   font-weight: 500;
   margin-top: 0.25rem;
   white-space: nowrap;
+  width: fit-content;
 }
 
 .new-box-form select {
