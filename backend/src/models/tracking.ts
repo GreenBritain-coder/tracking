@@ -53,7 +53,8 @@ export async function getAllTrackingNumbers(
   page: number = 1,
   limit: number = 50,
   status?: TrackingStatus,
-  customTimestamp?: string
+  customTimestamp?: string,
+  search?: string
 ): Promise<{ 
   data: TrackingNumberWithBox[]; 
   total: number; 
@@ -88,6 +89,13 @@ export async function getAllTrackingNumbers(
     conditions.push(`t.custom_timestamp >= $${paramIndex}::TIMESTAMPTZ AND t.custom_timestamp < $${paramIndex + 1}::TIMESTAMPTZ`);
     queryParams.push(startOfDay.toISOString(), startOfNextDay.toISOString());
     paramIndex += 2;
+  }
+
+  if (search) {
+    // Search in tracking_number field (case-insensitive, partial match)
+    conditions.push(`t.tracking_number ILIKE $${paramIndex}`);
+    queryParams.push(`%${search}%`);
+    paramIndex++;
   }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -151,7 +159,8 @@ export async function getTrackingNumbersByBox(
   page: number = 1,
   limit: number = 50,
   status?: TrackingStatus,
-  customTimestamp?: string
+  customTimestamp?: string,
+  search?: string
 ): Promise<{ 
   data: TrackingNumberWithBox[]; 
   total: number; 
@@ -186,6 +195,13 @@ export async function getTrackingNumbersByBox(
     conditions.push(`t.custom_timestamp >= $${paramIndex}::TIMESTAMPTZ AND t.custom_timestamp < $${paramIndex + 1}::TIMESTAMPTZ`);
     queryParams.push(startOfDay.toISOString(), startOfNextDay.toISOString());
     paramIndex += 2;
+  }
+
+  if (search) {
+    // Search in tracking_number field (case-insensitive, partial match)
+    conditions.push(`t.tracking_number ILIKE $${paramIndex}`);
+    queryParams.push(`%${search}%`);
+    paramIndex++;
   }
 
   const whereClause = `WHERE ${conditions.join(' AND ')}`;

@@ -26,6 +26,7 @@ export default function Dashboard() {
   const [selectedBox, setSelectedBox] = useState<number | null>(null);
   const [selectedStatus, setSelectedStatus] = useState<'not_scanned' | 'scanned' | 'delivered' | null>(null);
   const [selectedCustomTimestamp, setSelectedCustomTimestamp] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
@@ -46,13 +47,13 @@ export default function Dashboard() {
     // Refresh every 30 seconds
     const interval = setInterval(loadData, 30000);
     return () => clearInterval(interval);
-  }, [selectedBox, selectedStatus, selectedCustomTimestamp, currentPage, itemsPerPage]);
+  }, [selectedBox, selectedStatus, selectedCustomTimestamp, searchTerm, currentPage, itemsPerPage]);
 
   const loadData = async () => {
     try {
       setLoading(true);
       const [trackingRes, boxesRes] = await Promise.all([
-        api.getTrackingNumbers(selectedBox || undefined, currentPage, itemsPerPage, selectedStatus || undefined, selectedCustomTimestamp || undefined),
+        api.getTrackingNumbers(selectedBox || undefined, currentPage, itemsPerPage, selectedStatus || undefined, selectedCustomTimestamp || undefined, searchTerm || undefined),
         api.getBoxes(),
       ]);
       setTrackingNumbers(trackingRes.data.data);
@@ -176,6 +177,19 @@ export default function Dashboard() {
       </div>
 
       <div className="filter-controls">
+        <label>
+          Search Tracking Number:
+          <input
+            type="text"
+            placeholder="Enter tracking number..."
+            value={searchTerm}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setCurrentPage(1); // Reset to first page when search changes
+            }}
+            style={{ minWidth: '200px' }}
+          />
+        </label>
         <label>
           Filter by Box:
           <select
