@@ -418,8 +418,32 @@ export default function Dashboard() {
                     </span>
                   </td>
                   <td className="status-details">{tn.status_details || '-'}</td>
-                  <td className="tracking-number">{tn.tracking_number}</td>
-                  <td>{tn.box_name || '-'}</td>
+                  <td className="tracking-number">
+                    {tn.tracking_number}
+                    {tn.is_manual_status && (
+                      <span style={{ marginLeft: '0.5rem', fontSize: '0.75rem', color: '#7f8c8d' }} title="Status manually set - will not auto-update">
+                        🔒 Manual
+                      </span>
+                    )}
+                  </td>
+                  <td>
+                    <select
+                      value={tn.box_id || ''}
+                      onChange={(e) => {
+                        const boxId = e.target.value ? parseInt(e.target.value) : null;
+                        handleBoxChange(tn.id, boxId);
+                      }}
+                      className="box-select"
+                      style={{ padding: '0.3rem', border: '1px solid #ddd', borderRadius: '4px', fontSize: '0.9rem', minWidth: '150px' }}
+                    >
+                      <option value="">No Box</option>
+                      {boxes.map((box) => (
+                        <option key={box.id} value={box.id}>
+                          {box.name}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
                   <td>
                     {renderTimestampEdit()}
                   </td>
@@ -448,8 +472,9 @@ export default function Dashboard() {
                       <button
                         onClick={() => handleRefreshSingle(tn.id)}
                         className="refresh-btn"
-                        title="Refresh this tracking number"
-                        style={{ marginRight: '5px' }}
+                        title={tn.is_manual_status ? "Cannot refresh: Status is manually set" : "Refresh this tracking number"}
+                        disabled={tn.is_manual_status}
+                        style={{ marginRight: '5px', opacity: tn.is_manual_status ? 0.5 : 1 }}
                       >
                         🔄 Refresh
                       </button>
