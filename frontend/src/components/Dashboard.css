@@ -139,8 +139,9 @@
 
 .tracking-table {
   width: 100%;
-  min-width: 1200px;
+  min-width: 100%;
   border-collapse: collapse;
+  table-layout: auto;
 }
 
 .tracking-table thead {
@@ -148,68 +149,69 @@
 }
 
 .tracking-table th {
-  padding: 0.75rem;
+  padding: 0.5rem 0.4rem;
   text-align: left;
   font-weight: 600;
   color: #2c3e50;
   border-bottom: 2px solid #dee2e6;
   white-space: nowrap;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
 }
 
 .tracking-table td {
-  padding: 0.75rem;
+  padding: 0.5rem 0.4rem;
   border-bottom: 1px solid #dee2e6;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
 }
 
 .tracking-table tbody tr:hover {
   background-color: #f8f9fa;
 }
 
-/* Column width optimizations */
+/* Column width optimizations - more compact for desktop */
 .tracking-table th:nth-child(1),
 .tracking-table td:nth-child(1) {
-  min-width: 120px;
+  width: 100px;
 }
 
 .tracking-table th:nth-child(2),
 .tracking-table td:nth-child(2) {
-  min-width: 120px;
-  max-width: 200px;
+  width: 100px;
+  max-width: 120px;
 }
 
 .tracking-table th:nth-child(3),
 .tracking-table td:nth-child(3) {
-  min-width: 150px;
+  width: 140px;
 }
 
 .tracking-table th:nth-child(4),
 .tracking-table td:nth-child(4) {
-  min-width: 150px;
+  width: 130px;
 }
 
 .tracking-table th:nth-child(5),
 .tracking-table td:nth-child(5) {
-  min-width: 150px;
+  width: 130px;
 }
 
 .tracking-table th:nth-child(6),
 .tracking-table td:nth-child(6) {
-  min-width: 140px;
+  width: 120px;
 }
 
 .tracking-table th:nth-child(7),
 .tracking-table td:nth-child(7),
 .tracking-table th:nth-child(8),
 .tracking-table td:nth-child(8) {
-  min-width: 140px;
+  width: 110px;
   white-space: nowrap;
+  font-size: 0.8rem;
 }
 
 .tracking-table th:nth-child(9),
 .tracking-table td:nth-child(9) {
-  min-width: 200px;
+  width: 180px;
 }
 
 .status-badge {
@@ -489,11 +491,12 @@
   background-color: #e74c3c;
   color: white;
   border: none;
-  padding: 0.5rem 1rem;
+  padding: 0.35rem 0.6rem;
   border-radius: 4px;
   cursor: pointer;
   transition: background-color 0.2s;
   white-space: nowrap;
+  font-size: 0.8rem;
 }
 
 .delete-btn:hover {
@@ -646,6 +649,12 @@
 .refresh-btn {
   background-color: #3498db;
   color: white;
+  padding: 0.35rem 0.6rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  white-space: nowrap;
 }
 
 .refresh-btn:hover:not(:disabled) {

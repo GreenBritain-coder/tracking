@@ -140,6 +140,12 @@ export default function Dashboard() {
     return new Date(dateString).toLocaleString();
   };
 
+  const formatDateShort = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' }) + ' ' + 
+           date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  };
+
   // Get the most recently updated tracking number
   const getMostRecentUpdate = () => {
     if (trackingNumbers.length === 0) return null;
@@ -435,7 +441,7 @@ export default function Dashboard() {
                         handleBoxChange(tn.id, boxId);
                       }}
                       className="box-select"
-                      style={{ padding: '0.3rem', border: '1px solid #ddd', borderRadius: '4px', fontSize: '0.9rem', minWidth: '150px' }}
+                      style={{ padding: '0.3rem', border: '1px solid #ddd', borderRadius: '4px', fontSize: '0.8rem', minWidth: '120px', maxWidth: '130px' }}
                     >
                       <option value="">No Box</option>
                       {boxes.map((box) => (
@@ -449,8 +455,8 @@ export default function Dashboard() {
                   <td>
                     {renderTimestampEdit()}
                   </td>
-                  <td>{formatDate(tn.created_at)}</td>
-                  <td>{formatDate(tn.updated_at)}</td>
+                  <td>{formatDateShort(tn.created_at)}</td>
+                  <td>{formatDateShort(tn.updated_at)}</td>
                   <td>
                     <div className="action-buttons">
                       <select
@@ -476,7 +482,7 @@ export default function Dashboard() {
                         className="refresh-btn"
                         title={tn.is_manual_status ? "Cannot refresh: Status is manually set" : "Refresh this tracking number"}
                         disabled={tn.is_manual_status}
-                        style={{ marginRight: '5px', opacity: tn.is_manual_status ? 0.5 : 1 }}
+                        style={{ marginRight: '3px', opacity: tn.is_manual_status ? 0.5 : 1 }}
                       >
                         🔄 Refresh
                       </button>
