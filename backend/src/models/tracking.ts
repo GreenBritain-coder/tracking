@@ -113,33 +113,51 @@ export async function getAllTrackingNumbers(
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-  // Get total count and stats (always get all stats, not filtered)
-  const countResult = await pool.query(`
-    SELECT
-      COUNT(*) as total,
-      COUNT(CASE WHEN current_status = 'not_scanned' THEN 1 END) as not_scanned,
-      COUNT(CASE WHEN current_status = 'scanned' THEN 1 END) as scanned,
-      COUNT(CASE WHEN current_status = 'delivered' THEN 1 END) as delivered
-    FROM tracking_numbers
-  `);
-  const total = parseInt(countResult.rows[0].total);
-  const stats = {
-    not_scanned: parseInt(countResult.rows[0].not_scanned),
-    scanned: parseInt(countResult.rows[0].scanned),
-    delivered: parseInt(countResult.rows[0].delivered),
-    total
+  // Get filtered stats based on the same conditions
+  let stats = {
+    not_scanned: 0,
+    scanned: 0,
+    delivered: 0,
+    total: 0
   };
 
-  // Get filtered total count
-  let filteredTotal = total;
   if (conditions.length > 0) {
-    const filteredCountResult = await pool.query(`
-      SELECT COUNT(*) as total
+    // Calculate stats with filters applied
+    const statsResult = await pool.query(`
+      SELECT
+        COUNT(*) as total,
+        COUNT(CASE WHEN t.current_status = 'not_scanned' THEN 1 END) as not_scanned,
+        COUNT(CASE WHEN t.current_status = 'scanned' THEN 1 END) as scanned,
+        COUNT(CASE WHEN t.current_status = 'delivered' THEN 1 END) as delivered
       FROM tracking_numbers t
       ${whereClause}
     `, queryParams);
-    filteredTotal = parseInt(filteredCountResult.rows[0].total);
+    stats = {
+      not_scanned: parseInt(statsResult.rows[0].not_scanned),
+      scanned: parseInt(statsResult.rows[0].scanned),
+      delivered: parseInt(statsResult.rows[0].delivered),
+      total: parseInt(statsResult.rows[0].total)
+    };
+  } else {
+    // No filters, get all stats
+    const countResult = await pool.query(`
+      SELECT
+        COUNT(*) as total,
+        COUNT(CASE WHEN current_status = 'not_scanned' THEN 1 END) as not_scanned,
+        COUNT(CASE WHEN current_status = 'scanned' THEN 1 END) as scanned,
+        COUNT(CASE WHEN current_status = 'delivered' THEN 1 END) as delivered
+      FROM tracking_numbers
+    `);
+    stats = {
+      not_scanned: parseInt(countResult.rows[0].not_scanned),
+      scanned: parseInt(countResult.rows[0].scanned),
+      delivered: parseInt(countResult.rows[0].delivered),
+      total: parseInt(countResult.rows[0].total)
+    };
   }
+
+  // Get filtered total count (same as stats.total when filtered)
+  const filteredTotal = stats.total;
 
   // Add pagination parameters
   const limitParamIndex = paramIndex;
