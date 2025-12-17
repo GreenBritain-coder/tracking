@@ -410,7 +410,18 @@ router.patch(
 router.get('/logs/status-changes', async (req: AuthRequest, res: Response) => {
   try {
     const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
-    const logs = await getRecentStatusChanges(Math.min(limit, 200)); // Max 200 entries
+    const changeType = req.query.changeType as 'status_change' | 'details_update' | undefined;
+    const status = req.query.status as 'not_scanned' | 'scanned' | 'delivered' | undefined;
+    const boxId = req.query.boxId ? parseInt(req.query.boxId as string) : undefined;
+    const trackingNumber = req.query.trackingNumber as string | undefined;
+    
+    const logs = await getRecentStatusChanges(
+      Math.min(limit, 200), // Max 200 entries
+      changeType,
+      status,
+      boxId,
+      trackingNumber
+    );
     res.json(logs);
   } catch (error) {
     console.error('Error fetching status change logs:', error);

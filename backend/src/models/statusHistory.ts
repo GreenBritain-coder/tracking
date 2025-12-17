@@ -39,26 +39,67 @@ export interface StatusChangeLog {
   change_type: 'status_change' | 'details_update';
 }
 
-export async function getRecentStatusChanges(limit: number = 50): Promise<StatusChangeLog[]> {
-  const result = await pool.query(`
-    SELECT
-      sh.id,
-      t.tracking_number,
-      lag(sh.status) OVER (PARTITION BY sh.tracking_number_id ORDER BY sh.timestamp) as old_status,
-      sh.status as new_status,
-      t.status_details,
-      b.name as box_name,
-      sh.timestamp as changed_at,
-      CASE
-        WHEN lag(sh.status) OVER (PARTITION BY sh.tracking_number_id ORDER BY sh.timestamp) != sh.status THEN 'status_change'
-        ELSE 'details_update'
-      END as change_type
-    FROM status_history sh
-    JOIN tracking_numbers t ON sh.tracking_number_id = t.id
-    LEFT JOIN boxes b ON t.box_id = b.id
-    ORDER BY sh.timestamp DESC
-    LIMIT $1
-  `, [limit]);
+export async function getRecentStatusChanges(
+  limit: number = 50,
+  changeType?: 'status_change' | 'details_update',
+  status?: 'not_scanned' | 'scanned' | 'delivered',
+  boxId?: number,
+  trackingNumberSearch?: string
+): Promise<StatusChangeLog[]> {
+  let query = `
+    WITH status_changes AS (
+      SELECT
+        sh.id,
+        t.tracking_number,
+        lag(sh.status) OVER (PARTITION BY sh.tracking_number_id ORDER BY sh.timestamp) as old_status,
+        sh.status as new_status,
+        t.status_details,
+        b.name as box_name,
+        b.id as box_id,
+        sh.timestamp as changed_at,
+        CASE
+          WHEN lag(sh.status) OVER (PARTITION BY sh.tracking_number_id ORDER BY sh.timestamp) != sh.status THEN 'status_change'
+          ELSE 'details_update'
+        END as change_type
+      FROM status_history sh
+      JOIN tracking_numbers t ON sh.tracking_number_id = t.id
+      LEFT JOIN boxes b ON t.box_id = b.id
+    )
+    SELECT * FROM status_changes
+    WHERE 1=1
+  `;
+  
+  const params: any[] = [];
+  let paramCount = 0;
+
+  if (changeType) {
+    paramCount++;
+    query += ` AND change_type = $${paramCount}`;
+    params.push(changeType);
+  }
+
+  if (status) {
+    paramCount++;
+    query += ` AND new_status = $${paramCount}`;
+    params.push(status);
+  }
+
+  if (boxId) {
+    paramCount++;
+    query += ` AND box_id = $${paramCount}`;
+    params.push(boxId);
+  }
+
+  if (trackingNumberSearch) {
+    paramCount++;
+    query += ` AND tracking_number ILIKE $${paramCount}`;
+    params.push(`%${trackingNumberSearch}%`);
+  }
+
+  query += ` ORDER BY changed_at DESC LIMIT $${paramCount + 1}`;
+  params.push(limit);
+
+  const result = await pool.query(query, params);
   return result.rows;
 }
 

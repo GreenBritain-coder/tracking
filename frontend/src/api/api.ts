@@ -104,9 +104,20 @@ export const api = {
     axios.post<{ message: string; tracking: TrackingNumber }>(`${API_URL}/tracking/numbers/${id}/refresh`),
 
   // Logs
-  getStatusChangeLogs: (limit?: number) =>
-    axios.get<StatusChangeLog[]>(`${API_URL}/tracking/logs/status-changes`, {
-      params: limit ? { limit } : {}
-    }),
+  getStatusChangeLogs: (
+    limit?: number,
+    changeType?: 'status_change' | 'details_update',
+    status?: 'not_scanned' | 'scanned' | 'delivered',
+    boxId?: number,
+    trackingNumber?: string
+  ) => {
+    const params: any = {};
+    if (limit) params.limit = limit;
+    if (changeType) params.changeType = changeType;
+    if (status) params.status = status;
+    if (boxId) params.boxId = boxId;
+    if (trackingNumber) params.trackingNumber = trackingNumber;
+    return axios.get<StatusChangeLog[]>(`${API_URL}/tracking/logs/status-changes`, { params });
+  },
 };
 

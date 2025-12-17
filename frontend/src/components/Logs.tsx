@@ -1,21 +1,45 @@
 import { useState, useEffect } from 'react';
-import { api, StatusChangeLog } from '../api/api';
+import { api, StatusChangeLog, Box } from '../api/api';
 import './Logs.css';
 
 export default function Logs() {
   const [logs, setLogs] = useState<StatusChangeLog[]>([]);
+  const [boxes, setBoxes] = useState<Box[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [limit, setLimit] = useState(100);
+  const [changeTypeFilter, setChangeTypeFilter] = useState<'all' | 'status_change' | 'details_update'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'not_scanned' | 'scanned' | 'delivered'>('all');
+  const [boxFilter, setBoxFilter] = useState<number | null>(null);
+  const [trackingNumberSearch, setTrackingNumberSearch] = useState<string>('');
+
+  useEffect(() => {
+    loadBoxes();
+  }, []);
 
   useEffect(() => {
     loadLogs();
-  }, [limit]);
+  }, [limit, changeTypeFilter, statusFilter, boxFilter, trackingNumberSearch]);
+
+  const loadBoxes = async () => {
+    try {
+      const response = await api.getBoxes();
+      setBoxes(response.data);
+    } catch (err) {
+      console.error('Failed to load boxes:', err);
+    }
+  };
 
   const loadLogs = async () => {
     try {
       setLoading(true);
-      const response = await api.getStatusChangeLogs(limit);
+      const response = await api.getStatusChangeLogs(
+        limit,
+        changeTypeFilter !== 'all' ? changeTypeFilter : undefined,
+        statusFilter !== 'all' ? statusFilter : undefined,
+        boxFilter || undefined,
+        trackingNumberSearch || undefined
+      );
       setLogs(response.data);
       setError(null);
     } catch (err: any) {
@@ -82,6 +106,80 @@ export default function Logs() {
             🔄 Refresh
           </button>
         </div>
+      </div>
+
+      <div className="logs-filters">
+        <div className="filter-group">
+          <label>
+            <span>Change Type:</span>
+            <select
+              value={changeTypeFilter}
+              onChange={(e) => setChangeTypeFilter(e.target.value as 'all' | 'status_change' | 'details_update')}
+            >
+              <option value="all">All Types</option>
+              <option value="status_change">📈 Status Change</option>
+              <option value="details_update">📝 Details Update</option>
+            </select>
+          </label>
+        </div>
+
+        <div className="filter-group">
+          <label>
+            <span>Status:</span>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as 'all' | 'not_scanned' | 'scanned' | 'delivered')}
+            >
+              <option value="all">All Statuses</option>
+              <option value="not_scanned">🔴 Not Scanned</option>
+              <option value="scanned">🟡 Scanned</option>
+              <option value="delivered">🟢 Delivered</option>
+            </select>
+          </label>
+        </div>
+
+        <div className="filter-group">
+          <label>
+            <span>Box:</span>
+            <select
+              value={boxFilter || ''}
+              onChange={(e) => setBoxFilter(e.target.value ? parseInt(e.target.value) : null)}
+            >
+              <option value="">All Boxes</option>
+              {boxes.map((box) => (
+                <option key={box.id} value={box.id}>
+                  {box.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="filter-group">
+          <label>
+            <span>🔍 Search Tracking:</span>
+            <input
+              type="text"
+              placeholder="Enter tracking number..."
+              value={trackingNumberSearch}
+              onChange={(e) => setTrackingNumberSearch(e.target.value)}
+            />
+          </label>
+        </div>
+
+        {(changeTypeFilter !== 'all' || statusFilter !== 'all' || boxFilter !== null || trackingNumberSearch) && (
+          <button
+            onClick={() => {
+              setChangeTypeFilter('all');
+              setStatusFilter('all');
+              setBoxFilter(null);
+              setTrackingNumberSearch('');
+            }}
+            className="clear-filters-btn"
+          >
+            Clear Filters
+          </button>
+        )}
       </div>
 
       {logs.length === 0 ? (
