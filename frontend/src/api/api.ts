@@ -5,6 +5,8 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 export interface Box {
   id: number;
   name: string;
+  parent_box_id: number | null;
+  is_king_box: boolean;
   created_at: string;
   updated_at?: string;
 }
@@ -36,9 +38,34 @@ export interface StatusChangeLog {
 
 export const api = {
   // Boxes
-  getBoxes: () => axios.get<Box[]>(`${API_URL}/tracking/boxes`),
-  createBox: (name: string) => axios.post<Box>(`${API_URL}/tracking/boxes`, { name }),
-  updateBox: (id: number, name: string) => axios.patch<Box>(`${API_URL}/tracking/boxes/${id}`, { name }),
+  getBoxes: (kingBoxId?: number | null) => {
+    const params: any = {};
+    if (kingBoxId !== undefined && kingBoxId !== null) {
+      params.kingBoxId = kingBoxId;
+    }
+    return axios.get<Box[]>(`${API_URL}/tracking/boxes`, { params });
+  },
+  getKingBoxes: () => axios.get<Box[]>(`${API_URL}/tracking/boxes/king`),
+  createBox: (
+    name: string,
+    parentBoxId?: number | null,
+    isKingBox: boolean = false
+  ) => axios.post<Box>(`${API_URL}/tracking/boxes`, {
+    name,
+    parent_box_id: parentBoxId || null,
+    is_king_box: isKingBox,
+  }),
+  updateBox: (
+    id: number,
+    name: string,
+    parentBoxId?: number | null,
+    isKingBox?: boolean
+  ) => {
+    const body: any = { name };
+    if (parentBoxId !== undefined) body.parent_box_id = parentBoxId;
+    if (isKingBox !== undefined) body.is_king_box = isKingBox;
+    return axios.patch<Box>(`${API_URL}/tracking/boxes/${id}`, body);
+  },
   deleteBox: (id: number) => axios.delete(`${API_URL}/tracking/boxes/${id}`),
 
   // Tracking Numbers

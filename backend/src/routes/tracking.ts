@@ -12,7 +12,7 @@ import {
   deleteAllTrackingNumbers,
   updateTrackingNumberBox,
 } from '../models/tracking';
-import { createBox, getAllBoxes, getBoxById, updateBox, deleteBox } from '../models/box';
+import { createBox, getAllBoxes, getBoxById, updateBox, deleteBox, getKingBoxes } from '../models/box';
 import { getStatusHistory, getRecentStatusChanges } from '../models/statusHistory';
 import { updateAllTrackingStatuses } from '../services/scheduler';
 import { checkRoyalMailStatus } from '../services/scraper';
@@ -25,7 +25,8 @@ router.use(authenticate);
 // Boxes endpoints
 router.get('/boxes', async (req: AuthRequest, res: Response) => {
   try {
-    const boxes = await getAllBoxes();
+    const kingBoxId = req.query.kingBoxId ? parseInt(req.query.kingBoxId as string) : undefined;
+    const boxes = await getAllBoxes(kingBoxId || null);
     res.json(boxes);
   } catch (error) {
     console.error('Error fetching boxes:', error);
@@ -33,9 +34,24 @@ router.get('/boxes', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// Get king boxes only
+router.get('/boxes/king', async (req: AuthRequest, res: Response) => {
+  try {
+    const kingBoxes = await getKingBoxes();
+    res.json(kingBoxes);
+  } catch (error) {
+    console.error('Error fetching king boxes:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.post(
   '/boxes',
-  [body('name').notEmpty().trim()],
+  [
+    body('name').notEmpty().trim(),
+    body('parent_box_id').optional().isInt(),
+    body('is_king_box').optional().isBoolean(),
+  ],
   async (req: AuthRequest, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -43,8 +59,20 @@ router.post(
     }
 
     try {
-      const { name } = req.body;
-      const box = await createBox(name);
+      const { name, parent_box_id, is_king_box } = req.body;
+      
+      // Validate parent box exists if provided
+      if (parent_box_id) {
+        const parentBox = await getBoxById(parent_box_id);
+        if (!parentBox) {
+          return res.status(404).json({ error: 'Parent box not found' });
+        }
+        if (!parentBox.is_king_box) {
+          return res.status(400).json({ error: 'Parent box must be a king box' });
+        }
+      }
+      
+      const box = await createBox(name, parent_box_id || null, is_king_box || false);
       res.status(201).json(box);
     } catch (error) {
       console.error('Error creating box:', error);
@@ -55,7 +83,11 @@ router.post(
 
 router.patch(
   '/boxes/:id',
-  [body('name').notEmpty().trim()],
+  [
+    body('name').notEmpty().trim(),
+    body('parent_box_id').optional({ nullable: true }).isInt(),
+    body('is_king_box').optional().isBoolean(),
+  ],
   async (req: AuthRequest, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -64,8 +96,25 @@ router.patch(
 
     try {
       const { id } = req.params;
-      const { name } = req.body;
-      const box = await updateBox(Number(id), name);
+      const { name, parent_box_id, is_king_box } = req.body;
+      
+      // Validate parent box exists if provided
+      if (parent_box_id !== undefined && parent_box_id !== null) {
+        const parentBox = await getBoxById(parent_box_id);
+        if (!parentBox) {
+          return res.status(404).json({ error: 'Parent box not found' });
+        }
+        if (!parentBox.is_king_box) {
+          return res.status(400).json({ error: 'Parent box must be a king box' });
+        }
+      }
+      
+      const box = await updateBox(
+        Number(id),
+        name,
+        parent_box_id !== undefined ? parent_box_id : undefined,
+        is_king_box !== undefined ? is_king_box : undefined
+      );
       if (!box) {
         return res.status(404).json({ error: 'Box not found' });
       }

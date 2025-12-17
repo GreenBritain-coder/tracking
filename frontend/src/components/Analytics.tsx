@@ -7,6 +7,8 @@ interface BoxAnalytics {
   name: string;
   created_at: string;
   sent_out_date: string | null;
+  parent_box_id: number | null;
+  is_king_box: boolean;
   total_items: number;
   not_scanned_count: number;
   scanned_count: number;
@@ -194,7 +196,9 @@ export default function Analytics() {
                 setSelectedBox(selectedBox === box.id ? null : box.id)
               }
             >
-              <h4>{box.name}</h4>
+              <h4>
+                {box.is_king_box ? '👑 ' : ''}{box.name}
+              </h4>
               <div className="box-stats">
                 <div className="box-stat">
                   <span className="box-stat-label">Total:</span>

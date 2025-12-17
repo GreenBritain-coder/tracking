@@ -23,6 +23,8 @@ const STATUS_LABELS = {
 export default function Dashboard() {
   const [trackingNumbers, setTrackingNumbers] = useState<TrackingNumber[]>([]);
   const [boxes, setBoxes] = useState<Box[]>([]);
+  const [kingBoxes, setKingBoxes] = useState<Box[]>([]);
+  const [selectedKingBox, setSelectedKingBox] = useState<number | null>(null);
   const [selectedBox, setSelectedBox] = useState<number | null>(null);
   const [selectedStatus, setSelectedStatus] = useState<'not_scanned' | 'scanned' | 'delivered' | null>(null);
   const [selectedCustomTimestamp, setSelectedCustomTimestamp] = useState<string | null>(null);
@@ -44,22 +46,50 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadData();
+    loadKingBoxes();
     // Refresh every 30 seconds
     const interval = setInterval(loadData, 30000);
     return () => clearInterval(interval);
-  }, [selectedBox, selectedStatus, selectedCustomTimestamp, searchTerm, currentPage, itemsPerPage]);
+  }, [selectedBox, selectedStatus, selectedCustomTimestamp, searchTerm, currentPage, itemsPerPage, selectedKingBox]);
+
+  useEffect(() => {
+    // Reset selected box when king box changes
+    setSelectedBox(null);
+    loadBoxes();
+  }, [selectedKingBox]);
+
+  const loadKingBoxes = async () => {
+    try {
+      const response = await api.getKingBoxes();
+      setKingBoxes(response.data);
+    } catch (err: any) {
+      console.error('Failed to load king boxes:', err);
+    }
+  };
+
+  const loadBoxes = async () => {
+    try {
+      const response = await api.getBoxes(selectedKingBox || null);
+      setBoxes(response.data);
+    } catch (err: any) {
+      console.error('Failed to load boxes:', err);
+    }
+  };
 
   const loadData = async () => {
     try {
       setLoading(true);
-      const [trackingRes, boxesRes] = await Promise.all([
-        api.getTrackingNumbers(selectedBox || undefined, currentPage, itemsPerPage, selectedStatus || undefined, selectedCustomTimestamp || undefined, searchTerm || undefined),
-        api.getBoxes(),
-      ]);
+      const trackingRes = await api.getTrackingNumbers(
+        selectedBox || undefined,
+        currentPage,
+        itemsPerPage,
+        selectedStatus || undefined,
+        selectedCustomTimestamp || undefined,
+        searchTerm || undefined
+      );
       setTrackingNumbers(trackingRes.data.data);
       setTotalItems(trackingRes.data.total);
       setStats(trackingRes.data.stats);
-      setBoxes(boxesRes.data);
       setError('');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to load data');
@@ -192,6 +222,23 @@ export default function Dashboard() {
           />
         </label>
         <label>
+          Filter by King Box:
+          <select
+            value={selectedKingBox || ''}
+            onChange={(e) => {
+              setSelectedKingBox(e.target.value ? parseInt(e.target.value) : null);
+              setCurrentPage(1); // Reset to first page when filter changes
+            }}
+          >
+            <option value="">All King Boxes</option>
+            {kingBoxes.map((kingBox) => (
+              <option key={kingBox.id} value={kingBox.id}>
+                👑 {kingBox.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
           Filter by Box:
           <select
             value={selectedBox || ''}
@@ -203,7 +250,7 @@ export default function Dashboard() {
             <option value="">All Boxes</option>
             {boxes.map((box) => (
               <option key={box.id} value={box.id}>
-                {box.name}
+                {box.is_king_box ? '👑 ' : ''}{box.name}
               </option>
             ))}
           </select>

@@ -35,6 +35,33 @@ async function migrate() {
       END $$;
     `);
 
+    // Add parent_box_id column for king box hierarchy if it doesn't exist
+    await pool.query(`
+      DO $$ 
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name='boxes' AND column_name='parent_box_id'
+        ) THEN
+          ALTER TABLE boxes ADD COLUMN parent_box_id INTEGER REFERENCES boxes(id) ON DELETE SET NULL;
+          CREATE INDEX IF NOT EXISTS idx_boxes_parent_box_id ON boxes(parent_box_id);
+        END IF;
+      END $$;
+    `);
+
+    // Add is_king_box column if it doesn't exist
+    await pool.query(`
+      DO $$ 
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name='boxes' AND column_name='is_king_box'
+        ) THEN
+          ALTER TABLE boxes ADD COLUMN is_king_box BOOLEAN DEFAULT FALSE;
+        END IF;
+      END $$;
+    `);
+
     // Create postboxes table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS postboxes (

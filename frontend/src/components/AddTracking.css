@@ -68,7 +68,8 @@
 
 .new-box-form {
   display: flex;
-  gap: 1rem;
+  flex-direction: column;
+  gap: 0.75rem;
   margin-bottom: 1.5rem;
   padding: 1.5rem;
   background: white;
@@ -76,11 +77,39 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.new-box-form input {
+.new-box-form input[type="text"] {
   flex: 1;
   padding: 0.75rem;
   border: 1px solid #ddd;
   border-radius: 4px;
+  font-size: 1rem;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: normal;
+  cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: auto;
+  cursor: pointer;
+}
+
+.box-parent {
+  font-size: 0.85rem;
+  color: #7f8c8d;
+  font-weight: normal;
+  margin-left: 0.5rem;
+}
+
+.new-box-form select {
+  padding: 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: white;
   font-size: 1rem;
 }
 

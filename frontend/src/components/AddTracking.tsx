@@ -4,8 +4,11 @@ import './AddTracking.css';
 
 export default function AddTracking() {
   const [boxes, setBoxes] = useState<Box[]>([]);
+  const [kingBoxes, setKingBoxes] = useState<Box[]>([]);
   const [selectedBox, setSelectedBox] = useState<number | null>(null);
   const [newBoxName, setNewBoxName] = useState('');
+  const [newBoxIsKingBox, setNewBoxIsKingBox] = useState(false);
+  const [newBoxParentId, setNewBoxParentId] = useState<number | null>(null);
   const [showNewBox, setShowNewBox] = useState(false);
   const [trackingNumber, setTrackingNumber] = useState('');
   const [bulkTrackingNumbers, setBulkTrackingNumbers] = useState('');
@@ -15,10 +18,11 @@ export default function AddTracking() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [showBoxManagement, setShowBoxManagement] = useState(false);
   const [deletingBoxId, setDeletingBoxId] = useState<number | null>(null);
-  const [editingBox, setEditingBox] = useState<{ id: number; name: string } | null>(null);
+  const [editingBox, setEditingBox] = useState<{ id: number; name: string; parent_box_id: number | null; is_king_box: boolean } | null>(null);
 
   useEffect(() => {
     loadBoxes();
+    loadKingBoxes();
   }, []);
 
   const loadBoxes = async () => {
@@ -30,17 +34,35 @@ export default function AddTracking() {
     }
   };
 
+  const loadKingBoxes = async () => {
+    try {
+      const response = await api.getKingBoxes();
+      setKingBoxes(response.data);
+    } catch (error) {
+      console.error('Failed to load king boxes:', error);
+    }
+  };
+
   const handleCreateBox = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newBoxName.trim()) return;
 
     try {
-      const response = await api.createBox(newBoxName.trim());
+      const response = await api.createBox(
+        newBoxName.trim(),
+        newBoxIsKingBox ? null : newBoxParentId,
+        newBoxIsKingBox
+      );
+      if (newBoxIsKingBox) {
+        setKingBoxes([...kingBoxes, response.data]);
+      }
       setBoxes([...boxes, response.data]);
       setSelectedBox(response.data.id);
       setNewBoxName('');
+      setNewBoxIsKingBox(false);
+      setNewBoxParentId(null);
       setShowNewBox(false);
-      setMessage({ type: 'success', text: 'Box created successfully' });
+      setMessage({ type: 'success', text: `${newBoxIsKingBox ? 'King box' : 'Box'} created successfully` });
     } catch (error: any) {
       setMessage({
         type: 'error',
@@ -73,15 +95,18 @@ export default function AddTracking() {
     }
   };
 
-  const handleUpdateBox = async (boxId: number, newName: string) => {
+  const handleUpdateBox = async (boxId: number, newName: string, parentBoxId?: number | null, isKingBox?: boolean) => {
     if (!newName.trim()) {
       setEditingBox(null);
       return;
     }
 
     try {
-      const response = await api.updateBox(boxId, newName.trim());
+      const response = await api.updateBox(boxId, newName.trim(), parentBoxId, isKingBox);
       setBoxes(boxes.map(box => box.id === boxId ? response.data : box));
+      if (response.data.is_king_box) {
+        setKingBoxes(kingBoxes.map(box => box.id === boxId ? response.data : box));
+      }
       setEditingBox(null);
       setMessage({ type: 'success', text: 'Box updated successfully' });
     } catch (error: any) {
@@ -179,11 +204,14 @@ export default function AddTracking() {
             }
           >
             <option value="">No Box</option>
-            {boxes.map((box) => (
-              <option key={box.id} value={box.id}>
-                {box.name}
-              </option>
-            ))}
+            {boxes.filter(box => !box.is_king_box).map((box) => {
+              const parentKingBox = box.parent_box_id ? kingBoxes.find(kb => kb.id === box.parent_box_id) : null;
+              return (
+                <option key={box.id} value={box.id}>
+                  {box.name}{parentKingBox ? ` (👑 ${parentKingBox.name})` : ''}
+                </option>
+              );
+            })}
           </select>
         </label>
         <button
@@ -203,7 +231,36 @@ export default function AddTracking() {
             onChange={(e) => setNewBoxName(e.target.value)}
             required
           />
-          <button type="submit">Create Box</button>
+          <label className="checkbox-label">
+            <input
+              type="checkbox"
+              checked={newBoxIsKingBox}
+              onChange={(e) => {
+                setNewBoxIsKingBox(e.target.checked);
+                if (e.target.checked) {
+                  setNewBoxParentId(null);
+                }
+              }}
+            />
+            <span>👑 Create as King Box</span>
+          </label>
+          {!newBoxIsKingBox && (
+            <label>
+              Assign to King Box:
+              <select
+                value={newBoxParentId || ''}
+                onChange={(e) => setNewBoxParentId(e.target.value ? parseInt(e.target.value) : null)}
+              >
+                <option value="">No King Box (Standalone)</option>
+                {kingBoxes.map((kingBox) => (
+                  <option key={kingBox.id} value={kingBox.id}>
+                    👑 {kingBox.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <button type="submit">Create {newBoxIsKingBox ? 'King ' : ''}Box</button>
         </form>
       )}
 
@@ -220,59 +277,86 @@ export default function AddTracking() {
             {boxes.length === 0 ? (
               <p className="no-boxes">No boxes created yet.</p>
             ) : (
-              boxes.map((box) => (
-                <div key={box.id} className="box-item">
-                  {editingBox?.id === box.id ? (
-                    <>
-                      <input
-                        type="text"
-                        value={editingBox.name}
-                        onChange={(e) => setEditingBox({ ...editingBox, name: e.target.value })}
-                        onKeyPress={(e) => {
-                          if (e.key === 'Enter') {
-                            handleUpdateBox(editingBox.id, editingBox.name);
-                          } else if (e.key === 'Escape') {
-                            setEditingBox(null);
-                          }
-                        }}
-                        autoFocus
-                        className="box-edit-input"
-                      />
-                      <button
-                        onClick={() => handleUpdateBox(editingBox.id, editingBox.name)}
-                        className="save-box-btn"
-                      >
-                        ✓
-                      </button>
-                      <button
-                        onClick={() => setEditingBox(null)}
-                        className="cancel-box-btn"
-                      >
-                        ✕
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <span className="box-name">{box.name}</span>
-                      <div className="box-item-actions">
+              boxes.map((box) => {
+                const parentKingBox = box.parent_box_id ? kingBoxes.find(kb => kb.id === box.parent_box_id) : null;
+                return (
+                  <div key={box.id} className="box-item">
+                    {editingBox?.id === box.id ? (
+                      <>
+                        <input
+                          type="text"
+                          value={editingBox.name}
+                          onChange={(e) => setEditingBox({ ...editingBox, name: e.target.value })}
+                          onKeyPress={(e) => {
+                            if (e.key === 'Enter') {
+                              handleUpdateBox(editingBox.id, editingBox.name, editingBox.parent_box_id, editingBox.is_king_box);
+                            } else if (e.key === 'Escape') {
+                              setEditingBox(null);
+                            }
+                          }}
+                          autoFocus
+                          className="box-edit-input"
+                        />
+                        <label className="checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={editingBox.is_king_box}
+                            onChange={(e) => {
+                              setEditingBox({ ...editingBox, is_king_box: e.target.checked, parent_box_id: e.target.checked ? null : editingBox.parent_box_id });
+                            }}
+                          />
+                          <span>👑 King Box</span>
+                        </label>
+                        {!editingBox.is_king_box && (
+                          <select
+                            value={editingBox.parent_box_id || ''}
+                            onChange={(e) => setEditingBox({ ...editingBox, parent_box_id: e.target.value ? parseInt(e.target.value) : null })}
+                          >
+                            <option value="">No King Box</option>
+                            {kingBoxes.map((kb) => (
+                              <option key={kb.id} value={kb.id}>👑 {kb.name}</option>
+                            ))}
+                          </select>
+                        )}
                         <button
-                          onClick={() => setEditingBox(box)}
-                          className="edit-box-btn"
+                          onClick={() => handleUpdateBox(editingBox.id, editingBox.name, editingBox.parent_box_id, editingBox.is_king_box)}
+                          className="save-box-btn"
                         >
-                          ✏️ Edit
+                          ✓
                         </button>
                         <button
-                          onClick={() => handleDeleteBox(box.id, box.name)}
-                          disabled={deletingBoxId === box.id}
-                          className="delete-box-btn"
+                          onClick={() => setEditingBox(null)}
+                          className="cancel-box-btn"
                         >
-                          {deletingBoxId === box.id ? 'Deleting...' : 'Delete'}
+                          ✕
                         </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              ))
+                      </>
+                    ) : (
+                      <>
+                        <span className="box-name">
+                          {box.is_king_box ? '👑 ' : ''}{box.name}
+                          {parentKingBox && <span className="box-parent"> (in 👑 {parentKingBox.name})</span>}
+                        </span>
+                        <div className="box-item-actions">
+                          <button
+                            onClick={() => setEditingBox({ id: box.id, name: box.name, parent_box_id: box.parent_box_id, is_king_box: box.is_king_box })}
+                            className="edit-box-btn"
+                          >
+                            ✏️ Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeleteBox(box.id, box.name)}
+                            disabled={deletingBoxId === box.id}
+                            className="delete-box-btn"
+                          >
+                            {deletingBoxId === box.id ? 'Deleting...' : 'Delete'}
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })
             )}
           </div>
         )}
