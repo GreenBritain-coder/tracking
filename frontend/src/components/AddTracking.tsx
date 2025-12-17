@@ -64,9 +64,13 @@ export default function AddTracking() {
       setShowNewBox(false);
       setMessage({ type: 'success', text: `${newBoxIsKingBox ? 'King box' : 'Box'} created successfully` });
     } catch (error: any) {
+      const errorMessage = error.response?.data?.error || 
+                          (error.response?.data?.details ? JSON.stringify(error.response.data.details) : null) ||
+                          'Failed to create box';
+      console.error('Error creating box:', error.response?.data || error);
       setMessage({
         type: 'error',
-        text: error.response?.data?.error || 'Failed to create box',
+        text: errorMessage,
       });
     }
   };

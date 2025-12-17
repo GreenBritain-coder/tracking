@@ -49,20 +49,43 @@ router.post(
   '/boxes',
   [
     body('name').notEmpty().trim(),
-    body('parent_box_id').optional().isInt(),
-    body('is_king_box').optional().isBoolean(),
+    body('parent_box_id').optional({ nullable: true, checkFalsy: true }).custom((value) => {
+      if (value === undefined || value === null) return true;
+      const num = Number(value);
+      if (isNaN(num) || !Number.isInteger(num)) {
+        throw new Error('parent_box_id must be an integer');
+      }
+      return true;
+    }),
+    body('is_king_box').optional().custom((value) => {
+      if (value === undefined || value === null) return true;
+      if (typeof value === 'boolean') return true;
+      if (typeof value === 'string' && (value === 'true' || value === 'false')) return true;
+      throw new Error('is_king_box must be a boolean');
+    }),
   ],
   async (req: AuthRequest, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
+      console.error('Validation errors:', JSON.stringify(errors.array(), null, 2));
+      return res.status(400).json({ error: 'Validation failed', details: errors.array() });
     }
 
     try {
       const { name, parent_box_id, is_king_box } = req.body;
       
+      // Convert is_king_box to boolean if it's a string
+      let isKingBox = false;
+      if (is_king_box !== undefined && is_king_box !== null) {
+        if (typeof is_king_box === 'string') {
+          isKingBox = is_king_box === 'true';
+        } else {
+          isKingBox = Boolean(is_king_box);
+        }
+      }
+      
       // Validate parent box exists if provided
-      if (parent_box_id) {
+      if (parent_box_id !== undefined && parent_box_id !== null) {
         const parentBox = await getBoxById(parent_box_id);
         if (!parentBox) {
           return res.status(404).json({ error: 'Parent box not found' });
@@ -72,11 +95,12 @@ router.post(
         }
       }
       
-      const box = await createBox(name, parent_box_id || null, is_king_box || false);
+      const box = await createBox(name, parent_box_id || null, isKingBox);
       res.status(201).json(box);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating box:', error);
-      res.status(500).json({ error: 'Internal server error' });
+      console.error('Error details:', error.message, error.stack);
+      res.status(500).json({ error: 'Internal server error', details: error.message });
     }
   }
 );
