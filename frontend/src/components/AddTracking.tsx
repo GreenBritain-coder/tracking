@@ -344,7 +344,7 @@ export default function AddTracking() {
                           </span>
                           {parentKingBox && (
                             <span className="box-parent-badge">
-                              👑 Assigned to {parentKingBox.name}
+                              👑 {parentKingBox.name}
                             </span>
                           )}
                         </div>
