@@ -188,14 +188,21 @@ export default function Analytics() {
           </label>
         </div>
         <div className="boxes-grid">
-          {sortedBoxAnalytics.map((box) => (
-            <div
-              key={box.id}
-              className={`box-card ${selectedBox === box.id ? 'selected' : ''}`}
-              onClick={() =>
-                setSelectedBox(selectedBox === box.id ? null : box.id)
-              }
-            >
+          {sortedBoxAnalytics.map((box) => {
+            // Check if box is fully delivered (all items delivered, none pending)
+            const isFullyDelivered = box.total_items > 0 && 
+                                    box.delivered_count === box.total_items && 
+                                    box.not_scanned_count === 0 && 
+                                    box.scanned_count === 0;
+            
+            return (
+              <div
+                key={box.id}
+                className={`box-card ${selectedBox === box.id ? 'selected' : ''} ${isFullyDelivered ? 'fully-delivered' : ''}`}
+                onClick={() =>
+                  setSelectedBox(selectedBox === box.id ? null : box.id)
+                }
+              >
               <h4>
                 {box.is_king_box ? '👑 ' : ''}{box.name}
               </h4>
@@ -230,7 +237,8 @@ export default function Analytics() {
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 

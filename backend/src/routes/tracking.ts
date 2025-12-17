@@ -149,6 +149,8 @@ router.get('/numbers', async (req: AuthRequest, res: Response) => {
     const status = req.query.status as 'not_scanned' | 'scanned' | 'delivered' | undefined;
     const customTimestamp = req.query.customTimestamp as string | undefined;
     const search = req.query.search as string | undefined;
+    const trackingNumberSearch = req.query.trackingNumber as string | undefined;
+    const unassignedOnly = req.query.unassignedOnly === 'true';
     
     // Validate status if provided
     if (status && !['not_scanned', 'scanned', 'delivered'].includes(status)) {
@@ -161,8 +163,8 @@ router.get('/numbers', async (req: AuthRequest, res: Response) => {
     }
     
     const result = boxId
-      ? await getTrackingNumbersByBox(boxId, page, limit, status, customTimestamp, search)
-      : await getAllTrackingNumbers(page, limit, status, customTimestamp, search);
+      ? await getTrackingNumbersByBox(boxId, page, limit, status, customTimestamp, search || trackingNumberSearch)
+      : await getAllTrackingNumbers(page, limit, status, customTimestamp, search || trackingNumberSearch, unassignedOnly);
     res.json(result);
   } catch (error) {
     console.error('Error fetching tracking numbers:', error);

@@ -128,6 +128,21 @@
   background-color: #f8f9ff;
 }
 
+.box-card.fully-delivered {
+  border: 2px solid #27ae60;
+  box-shadow: 0 0 15px rgba(39, 174, 96, 0.4), 0 2px 4px rgba(0, 0, 0, 0.1);
+  animation: greenGlow 2s ease-in-out infinite alternate;
+}
+
+@keyframes greenGlow {
+  from {
+    box-shadow: 0 0 15px rgba(39, 174, 96, 0.4), 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+  to {
+    box-shadow: 0 0 25px rgba(39, 174, 96, 0.6), 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+}
+
 .box-card h4 {
   color: #2c3e50;
   margin-bottom: 1rem;

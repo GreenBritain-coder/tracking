@@ -25,7 +25,7 @@ export default function Dashboard() {
   const [boxes, setBoxes] = useState<Box[]>([]);
   const [kingBoxes, setKingBoxes] = useState<Box[]>([]);
   const [selectedKingBox, setSelectedKingBox] = useState<number | null>(null);
-  const [selectedBox, setSelectedBox] = useState<number | null>(null);
+  const [selectedBox, setSelectedBox] = useState<number | null | -1>(null);
   const [selectedStatus, setSelectedStatus] = useState<'not_scanned' | 'scanned' | 'delivered' | null>(null);
   const [selectedCustomTimestamp, setSelectedCustomTimestamp] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -80,12 +80,13 @@ export default function Dashboard() {
     try {
       setLoading(true);
       const trackingRes = await api.getTrackingNumbers(
-        selectedBox || undefined,
+        selectedBox === -1 ? undefined : (selectedBox || undefined),
         currentPage,
         itemsPerPage,
         selectedStatus || undefined,
         selectedCustomTimestamp || undefined,
-        searchTerm || undefined
+        searchTerm || undefined,
+        selectedBox === -1 // unassignedOnly flag
       );
       setTrackingNumbers(trackingRes.data.data);
       setTotalItems(trackingRes.data.total);
@@ -241,13 +242,21 @@ export default function Dashboard() {
         <label>
           Filter by Box:
           <select
-            value={selectedBox || ''}
+            value={selectedBox === -1 ? -1 : (selectedBox || '')}
             onChange={(e) => {
-              setSelectedBox(e.target.value ? parseInt(e.target.value) : null);
+              const value = e.target.value;
+              if (value === '-1') {
+                setSelectedBox(-1); // Special value for unassigned
+              } else if (value === '') {
+                setSelectedBox(null);
+              } else {
+                setSelectedBox(parseInt(value));
+              }
               setCurrentPage(1); // Reset to first page when filter changes
             }}
           >
             <option value="">All Boxes</option>
+            <option value="-1">📦 No Box (Unassigned)</option>
             {boxes.map((box) => (
               <option key={box.id} value={box.id}>
                 {box.is_king_box ? '👑 ' : ''}{box.name}

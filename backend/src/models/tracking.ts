@@ -54,7 +54,8 @@ export async function getAllTrackingNumbers(
   limit: number = 50,
   status?: TrackingStatus,
   customTimestamp?: string,
-  search?: string
+  search?: string,
+  unassignedOnly?: boolean
 ): Promise<{ 
   data: TrackingNumberWithBox[]; 
   total: number; 
@@ -96,6 +97,10 @@ export async function getAllTrackingNumbers(
     conditions.push(`t.tracking_number ILIKE $${paramIndex}`);
     queryParams.push(`%${search}%`);
     paramIndex++;
+  }
+
+  if (unassignedOnly) {
+    conditions.push(`t.box_id IS NULL`);
   }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
