@@ -177,17 +177,18 @@ export default function Dashboard() {
       </div>
 
       <div className="filter-controls">
-        <label>
-          Search Tracking Number:
+        <label style={{ flex: '1 1 300px', minWidth: '250px' }}>
+          <span style={{ marginBottom: '0.5rem', display: 'block', fontWeight: 600, color: '#2c3e50' }}>
+            🔍 Search Tracking Number
+          </span>
           <input
             type="text"
-            placeholder="Enter tracking number..."
+            placeholder="Enter tracking number to search..."
             value={searchTerm}
             onChange={(e) => {
               setSearchTerm(e.target.value);
               setCurrentPage(1); // Reset to first page when search changes
             }}
-            style={{ minWidth: '200px' }}
           />
         </label>
         <label>

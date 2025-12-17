@@ -34,12 +34,35 @@
 }
 
 .filter-controls select,
-.filter-controls input[type="date"] {
+.filter-controls input[type="date"],
+.filter-controls input[type="text"] {
   padding: 0.5rem;
   border: 1px solid #ddd;
   border-radius: 4px;
   font-size: 1rem;
   min-width: 150px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.filter-controls input[type="text"] {
+  padding: 0.65rem 0.75rem;
+  border: 2px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  min-width: 250px;
+  background-color: #fafafa;
+}
+
+.filter-controls input[type="text"]:focus {
+  outline: none;
+  border-color: #3498db;
+  background-color: white;
+  box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+.filter-controls input[type="text"]::placeholder {
+  color: #95a5a6;
+  font-style: italic;
 }
 
 .loading {
