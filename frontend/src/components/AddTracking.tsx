@@ -53,10 +53,11 @@ export default function AddTracking() {
         newBoxIsKingBox ? null : newBoxParentId,
         newBoxIsKingBox
       );
+      // Reload boxes to ensure we have the latest data with parent relationships
+      await loadBoxes();
       if (newBoxIsKingBox) {
-        setKingBoxes([...kingBoxes, response.data]);
+        await loadKingBoxes();
       }
-      setBoxes([...boxes, response.data]);
       setSelectedBox(response.data.id);
       setNewBoxName('');
       setNewBoxIsKingBox(false);
@@ -337,10 +338,16 @@ export default function AddTracking() {
                       </>
                     ) : (
                       <>
-                        <span className="box-name">
-                          {box.is_king_box ? '👑 ' : ''}{box.name}
-                          {parentKingBox && <span className="box-parent"> (in 👑 {parentKingBox.name})</span>}
-                        </span>
+                        <div className="box-name-container">
+                          <span className="box-name">
+                            {box.is_king_box ? '👑 ' : ''}{box.name}
+                          </span>
+                          {parentKingBox && (
+                            <span className="box-parent-badge">
+                              👑 Assigned to {parentKingBox.name}
+                            </span>
+                          )}
+                        </div>
                         <div className="box-item-actions">
                           <button
                             onClick={() => setEditingBox({ id: box.id, name: box.name, parent_box_id: box.parent_box_id, is_king_box: box.is_king_box })}
