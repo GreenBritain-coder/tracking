@@ -285,6 +285,7 @@ export default function Dashboard() {
               <th>Status Details</th>
               <th>Tracking Number</th>
               <th>Box</th>
+              <th>TrackingMore Status</th>
               <th>Custom Timestamp</th>
               <th>Created</th>
               <th>Updated</th>
@@ -294,7 +295,7 @@ export default function Dashboard() {
           <tbody>
             {trackingNumbers.length === 0 ? (
               <tr>
-                <td colSpan={8} className="empty-state">
+                <td colSpan={9} className="empty-state">
                   No tracking numbers found
                 </td>
               </tr>
@@ -444,6 +445,7 @@ export default function Dashboard() {
                       ))}
                     </select>
                   </td>
+                  <td>{tn.trackingmore_status || '-'}</td>
                   <td>
                     {renderTimestampEdit()}
                   </td>
@@ -589,6 +591,10 @@ export default function Dashboard() {
                         </option>
                       ))}
                     </select>
+                  </div>
+                  <div className="tracking-card-detail-row">
+                    <span className="tracking-card-detail-label">TrackingMore Status:</span>
+                    <span className="tracking-card-detail-value">{tn.trackingmore_status || '-'}</span>
                   </div>
                   <div className="tracking-card-detail-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '0.5rem' }}>
                     <span className="tracking-card-detail-label">Custom Timestamp:</span>

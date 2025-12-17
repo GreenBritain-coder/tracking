@@ -10,6 +10,7 @@ export interface TrackingNumber {
   status_details: string | null;
   custom_timestamp: Date | null;
   is_manual_status: boolean;
+  trackingmore_status: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -270,7 +271,8 @@ export async function updateTrackingStatus(
   status: TrackingStatus,
   statusDetails?: string,
   customTimestamp?: Date | null,
-  isManual: boolean = false
+  isManual: boolean = false,
+  trackingmoreStatus?: string | null
 ): Promise<TrackingNumber | null> {
   const client = await pool.connect();
   try {
@@ -304,23 +306,39 @@ export async function updateTrackingStatus(
              status_details = $2,
              custom_timestamp = $3,
              is_manual_status = $4,
+             trackingmore_status = $5,
              updated_at = CURRENT_TIMESTAMP
-         WHERE id = $5
+         WHERE id = $6
          RETURNING *`,
-        [status, statusDetails || null, customTimestamp, isManual, id]
+        [status, statusDetails || null, customTimestamp, isManual, trackingmoreStatus || null, id]
       );
     } else {
       // Update without changing custom_timestamp (preserve existing value)
-      updateResult = await client.query(
-        `UPDATE tracking_numbers
-         SET current_status = $1,
-             status_details = $2,
-             is_manual_status = $3,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE id = $4
-         RETURNING *`,
-        [status, statusDetails || null, isManual, id]
-      );
+      // Only update trackingmore_status if provided
+      if (trackingmoreStatus !== undefined) {
+        updateResult = await client.query(
+          `UPDATE tracking_numbers
+           SET current_status = $1,
+               status_details = $2,
+               is_manual_status = $3,
+               trackingmore_status = $4,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE id = $5
+           RETURNING *`,
+          [status, statusDetails || null, isManual, trackingmoreStatus || null, id]
+        );
+      } else {
+        updateResult = await client.query(
+          `UPDATE tracking_numbers
+           SET current_status = $1,
+               status_details = $2,
+               is_manual_status = $3,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE id = $4
+           RETURNING *`,
+          [status, statusDetails || null, isManual, id]
+        );
+      }
     }
 
     if (updateResult.rows.length === 0) {

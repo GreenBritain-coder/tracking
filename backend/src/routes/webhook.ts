@@ -244,7 +244,7 @@ router.post('/trackingmore', async (req: any, res: Response) => {
 
     // Only update if status changed or statusHeader is different
     if (mappedStatus !== tracking.current_status || statusHeader !== tracking.status_details) {
-      await updateTrackingStatus(tracking.id, mappedStatus, statusHeader, undefined, false);
+      await updateTrackingStatus(tracking.id, mappedStatus, statusHeader, undefined, false, deliveryStatus);
       console.log(
         `[${trackingNumber}] Webhook updated: ${tracking.current_status} -> ${mappedStatus}`,
         statusHeader ? `Header: ${statusHeader}` : ''

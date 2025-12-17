@@ -322,7 +322,7 @@ router.post('/numbers/:id/refresh', async (req: AuthRequest, res: Response) => {
     
     // Update status if changed (isManual=false for refresh)
     if (result.status !== tracking.current_status || result.statusHeader !== tracking.status_details) {
-      await updateTrackingStatus(tracking.id, result.status, result.statusHeader, undefined, false);
+      await updateTrackingStatus(tracking.id, result.status, result.statusHeader, undefined, false, result.trackingmoreStatus);
       console.log(`Manual refresh updated ${tracking.tracking_number}: ${tracking.current_status} -> ${result.status}`);
     }
     

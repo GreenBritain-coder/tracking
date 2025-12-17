@@ -17,6 +17,7 @@ export interface TrackingNumber {
   status_details?: string | null;
   custom_timestamp?: string | null;
   is_manual_status: boolean;
+  trackingmore_status: string | null;
   created_at: string;
   updated_at: string;
   box_name?: string | null;

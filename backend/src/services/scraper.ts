@@ -11,6 +11,7 @@ function parseTrackingMoreResponse(data: any, trackingNumber: string): {
   status: TrackingStatus;
   details?: string;
   statusHeader?: string;
+  trackingmoreStatus?: string;
 } {
   try {
     // Log the full response structure for debugging
@@ -43,6 +44,7 @@ function parseTrackingMoreResponse(data: any, trackingNumber: string): {
         status: 'not_scanned',
         details: 'Tracking exists in TrackingMore but not yet processed',
         statusHeader: 'Pending',
+        trackingmoreStatus: undefined,
       };
     }
     
@@ -55,6 +57,9 @@ function parseTrackingMoreResponse(data: any, trackingNumber: string): {
                       trackingData?.tracking_status ||
                       '';
     const statusLower = statusText.toLowerCase();
+    
+    // Get the raw TrackingMore delivery_status for storage
+    const trackingmoreStatus = trackingData?.delivery_status || undefined;
     
     // Extract status header/description
     const statusHeader = trackingData?.delivery_status ||
@@ -95,6 +100,7 @@ function parseTrackingMoreResponse(data: any, trackingNumber: string): {
           status: 'not_scanned',
           details,
           statusHeader: 'Pending',
+          trackingmoreStatus,
         };
       }
     }
@@ -108,6 +114,7 @@ function parseTrackingMoreResponse(data: any, trackingNumber: string): {
         status: 'delivered',
         details,
         statusHeader: statusHeader || 'Delivered',
+        trackingmoreStatus,
       };
     } else if (statusLower === 'transit' ||
                statusLower === 'pickup' ||
@@ -127,6 +134,7 @@ function parseTrackingMoreResponse(data: any, trackingNumber: string): {
         status: 'scanned',
         details,
         statusHeader: statusHeader || 'In Transit',
+        trackingmoreStatus,
       };
     } else if (statusLower.includes('not found') ||
                statusLower.includes('no information') ||
@@ -136,6 +144,7 @@ function parseTrackingMoreResponse(data: any, trackingNumber: string): {
         status: 'not_scanned',
         details,
         statusHeader: statusHeader || 'Not Scanned',
+        trackingmoreStatus,
       };
     } else {
       // Default: if we have any tracking info, consider it scanned
@@ -145,6 +154,7 @@ function parseTrackingMoreResponse(data: any, trackingNumber: string): {
           status: 'scanned',
           details,
           statusHeader: statusHeader || 'In Transit',
+          trackingmoreStatus,
         };
       } else {
         console.log(`[${trackingNumber}] TrackingMore: No tracking info, defaulting to NOT_SCANNED`);
@@ -152,6 +162,7 @@ function parseTrackingMoreResponse(data: any, trackingNumber: string): {
           status: 'not_scanned',
           details,
           statusHeader: statusHeader || 'Not Scanned',
+          trackingmoreStatus,
         };
       }
     }
@@ -160,6 +171,7 @@ function parseTrackingMoreResponse(data: any, trackingNumber: string): {
     return {
       status: 'not_scanned',
       details: 'Error parsing TrackingMore response',
+      trackingmoreStatus: undefined,
     };
   }
 }
@@ -168,6 +180,7 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
   status: TrackingStatus;
   details?: string;
   statusHeader?: string;
+  trackingmoreStatus?: string;
 }> {
   try {
     // Use TrackingMore API

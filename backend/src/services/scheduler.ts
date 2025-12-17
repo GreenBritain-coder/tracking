@@ -57,7 +57,7 @@ export async function updateAllTrackingStatuses() {
         if (statusChanged || needsStatusDetails || statusDetailsChanged) {
           // Store the statusHeader (like "We've got it") in the status_details field
           // isManual=false for automatic updates
-          await updateTrackingStatus(tn.id, result.status, result.statusHeader, undefined, false);
+          await updateTrackingStatus(tn.id, result.status, result.statusHeader, undefined, false, result.trackingmoreStatus);
           updated++;
           if (statusChanged) {
             console.log(

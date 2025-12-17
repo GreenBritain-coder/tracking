@@ -112,6 +112,19 @@ async function migrate() {
       END $$;
     `);
 
+    // Add trackingmore_status column if it doesn't exist
+    await pool.query(`
+      DO $$ 
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name='tracking_numbers' AND column_name='trackingmore_status'
+        ) THEN
+          ALTER TABLE tracking_numbers ADD COLUMN trackingmore_status VARCHAR(100);
+        END IF;
+      END $$;
+    `);
+
     // Create status_history table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS status_history (
