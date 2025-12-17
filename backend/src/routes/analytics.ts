@@ -47,7 +47,13 @@ router.get('/boxes', async (req, res) => {
           END
         ) as avg_drop_to_scan_hours
       FROM boxes b
-      LEFT JOIN tracking_numbers t ON b.id = t.box_id
+      LEFT JOIN tracking_numbers t ON (
+        -- For king boxes, include tracking numbers from all child boxes
+        -- For regular boxes, only include directly assigned tracking numbers
+        (b.is_king_box = true AND EXISTS (SELECT 1 FROM boxes child WHERE child.parent_box_id = b.id AND child.id = t.box_id))
+        OR
+        (b.is_king_box = false AND b.id = t.box_id)
+      )
       GROUP BY b.id, b.name, b.created_at, b.parent_box_id, b.is_king_box
       ORDER BY COALESCE(MIN(t.created_at), b.created_at) ASC
     `);
@@ -68,6 +74,16 @@ router.get('/boxes/:boxId', async (req, res) => {
     const boxResult = await pool.query('SELECT * FROM boxes WHERE id = $1', [boxId]);
     if (boxResult.rows.length === 0) {
       return res.status(404).json({ error: 'Box not found' });
+    }
+    
+    const box = boxResult.rows[0];
+    
+    // Build WHERE clause: for king boxes, include tracking numbers from all child boxes
+    let whereClause = '';
+    if (box.is_king_box) {
+      whereClause = 'WHERE t.box_id IN (SELECT id FROM boxes WHERE parent_box_id = $1)';
+    } else {
+      whereClause = 'WHERE t.box_id = $1';
     }
     
     // Get tracking numbers with time calculations
@@ -104,7 +120,7 @@ router.get('/boxes/:boxId', async (req, res) => {
           ELSE NULL
         END as scan_to_delivery_hours
       FROM tracking_numbers t
-      WHERE t.box_id = $1
+      ${whereClause}
       ORDER BY t.created_at DESC
     `, [boxId]);
     
