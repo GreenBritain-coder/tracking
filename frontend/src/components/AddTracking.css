@@ -111,10 +111,12 @@
   gap: 0.25rem;
   flex: 1;
   align-items: flex-start;
+  min-width: 0;
 }
 
 .box-parent-badge {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
   font-size: 0.7rem;
   color: #8b6914;
   background-color: #fff9e6;
@@ -124,7 +126,8 @@
   font-weight: 500;
   margin-top: 0.25rem;
   white-space: nowrap;
-  width: fit-content;
+  flex-shrink: 0;
+  align-self: flex-start;
 }
 
 .new-box-form select {
