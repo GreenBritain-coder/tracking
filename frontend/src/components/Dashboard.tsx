@@ -126,6 +126,16 @@ export default function Dashboard() {
     }
   };
 
+  const handleBoxChange = async (id: number, boxId: number | null) => {
+    try {
+      await api.updateTrackingNumberBox(id, boxId);
+      // Reload data to show updated box
+      loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to update box');
+    }
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString();
   };
@@ -514,7 +524,14 @@ export default function Dashboard() {
             return (
               <div key={tn.id} className="tracking-card-item">
                 <div className="tracking-card-header">
-                  <div className="tracking-card-tracking-number">{tn.tracking_number}</div>
+                  <div className="tracking-card-tracking-number">
+                    {tn.tracking_number}
+                    {tn.is_manual_status && (
+                      <span style={{ marginLeft: '0.5rem', fontSize: '0.75rem', color: '#7f8c8d' }} title="Status manually set - will not auto-update">
+                        🔒 Manual
+                      </span>
+                    )}
+                  </div>
                   <span
                     className="status-badge"
                     style={{ backgroundColor: STATUS_COLORS[tn.current_status] }}
@@ -529,9 +546,24 @@ export default function Dashboard() {
                       <span className="tracking-card-detail-value">{tn.status_details}</span>
                     </div>
                   )}
-                  <div className="tracking-card-detail-row">
+                  <div className="tracking-card-detail-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '0.5rem' }}>
                     <span className="tracking-card-detail-label">Box:</span>
-                    <span className="tracking-card-detail-value">{tn.box_name || '-'}</span>
+                    <select
+                      value={tn.box_id || ''}
+                      onChange={(e) => {
+                        const boxId = e.target.value ? parseInt(e.target.value) : null;
+                        handleBoxChange(tn.id, boxId);
+                      }}
+                      className="box-select"
+                      style={{ width: '100%', padding: '0.4rem', border: '1px solid #ddd', borderRadius: '4px', fontSize: '0.9rem' }}
+                    >
+                      <option value="">No Box</option>
+                      {boxes.map((box) => (
+                        <option key={box.id} value={box.id}>
+                          {box.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <div className="tracking-card-detail-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '0.5rem' }}>
                     <span className="tracking-card-detail-label">Custom Timestamp:</span>
@@ -569,8 +601,9 @@ export default function Dashboard() {
                     <button
                       onClick={() => handleRefreshSingle(tn.id)}
                       className="refresh-btn"
-                      title="Refresh this tracking number"
-                      style={{ width: '100%', minHeight: '44px' }}
+                      title={tn.is_manual_status ? "Cannot refresh: Status is manually set" : "Refresh this tracking number"}
+                      disabled={tn.is_manual_status}
+                      style={{ width: '100%', minHeight: '44px', opacity: tn.is_manual_status ? 0.5 : 1 }}
                     >
                       🔄 Refresh
                     </button>

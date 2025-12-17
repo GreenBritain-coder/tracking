@@ -18,12 +18,16 @@ export async function updateAllTrackingStatuses() {
     const allTrackingNumbersResponse = await getAllTrackingNumbers(1, 10000);
     const allTrackingNumbers = allTrackingNumbersResponse.data;
     
-    // Filter out delivered items - no need to recheck them
-    const trackingNumbers = allTrackingNumbers.filter(tn => tn.current_status !== 'delivered');
-    const skippedDelivered = allTrackingNumbers.length - trackingNumbers.length;
+    // Filter out delivered items AND manually set statuses
+    const trackingNumbers = allTrackingNumbers.filter(tn => 
+      tn.current_status !== 'delivered' && !tn.is_manual_status
+    );
+    const skippedDelivered = allTrackingNumbers.filter(tn => tn.current_status === 'delivered').length;
+    const skippedManual = allTrackingNumbers.filter(tn => tn.is_manual_status).length;
     
     console.log(`Total tracking numbers: ${allTrackingNumbers.length}`);
     console.log(`Skipping ${skippedDelivered} delivered item(s) - no need to recheck`);
+    console.log(`Skipping ${skippedManual} manually set item(s) - will not auto-update`);
     console.log(`Checking ${trackingNumbers.length} tracking number(s)...`);
     
     let updated = 0;
@@ -52,7 +56,8 @@ export async function updateAllTrackingStatuses() {
         
         if (statusChanged || needsStatusDetails || statusDetailsChanged) {
           // Store the statusHeader (like "We've got it") in the status_details field
-          await updateTrackingStatus(tn.id, result.status, result.statusHeader);
+          // isManual=false for automatic updates
+          await updateTrackingStatus(tn.id, result.status, result.statusHeader, undefined, false);
           updated++;
           if (statusChanged) {
             console.log(
@@ -79,7 +84,7 @@ export async function updateAllTrackingStatuses() {
     }
     
     console.log(
-      `Update complete. Updated: ${updated}, Errors: ${errors}, Checked: ${trackingNumbers.length}, Skipped (delivered): ${skippedDelivered}, Total: ${allTrackingNumbers.length}`
+      `Update complete. Updated: ${updated}, Errors: ${errors}, Checked: ${trackingNumbers.length}, Skipped (delivered): ${skippedDelivered}, Skipped (manual): ${skippedManual}, Total: ${allTrackingNumbers.length}`
     );
   } catch (error) {
     console.error('Error in scheduled update:', error);

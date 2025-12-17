@@ -230,12 +230,21 @@ router.post('/trackingmore', async (req: any, res: Response) => {
       return res.status(200).json({ message: 'Tracking number not found in database, ignored' });
     }
 
+    // Skip if status was manually set
+    if (tracking.is_manual_status) {
+      console.log(`[${trackingNumber}] Webhook received but status is manually set, skipping automatic update`);
+      return res.status(200).json({ 
+        message: 'Status is manually set, skipping automatic update',
+        tracking_number: trackingNumber
+      });
+    }
+
     // Map delivery_status to our TrackingStatus enum
     const mappedStatus = mapDeliveryStatus(deliveryStatus);
 
     // Only update if status changed or statusHeader is different
     if (mappedStatus !== tracking.current_status || statusHeader !== tracking.status_details) {
-      await updateTrackingStatus(tracking.id, mappedStatus, statusHeader);
+      await updateTrackingStatus(tracking.id, mappedStatus, statusHeader, undefined, false);
       console.log(
         `[${trackingNumber}] Webhook updated: ${tracking.current_status} -> ${mappedStatus}`,
         statusHeader ? `Header: ${statusHeader}` : ''

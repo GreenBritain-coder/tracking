@@ -10,6 +10,7 @@ import {
   deleteTrackingNumber,
   bulkCreateTrackingNumbers,
   deleteAllTrackingNumbers,
+  updateTrackingNumberBox,
 } from '../models/tracking';
 import { createBox, getAllBoxes, getBoxById, updateBox, deleteBox } from '../models/box';
 import { getStatusHistory, getRecentStatusChanges } from '../models/statusHistory';
@@ -262,6 +263,42 @@ router.delete('/numbers', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// Update box for existing tracking number
+router.patch(
+  '/numbers/:id/box',
+  [body('box_id').optional({ nullable: true }).isInt()],
+  async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    try {
+      const { id } = req.params;
+      const { box_id } = req.body;
+      
+      // Validate box exists if provided
+      if (box_id) {
+        const box = await getBoxById(box_id);
+        if (!box) {
+          return res.status(404).json({ error: 'Box not found' });
+        }
+      }
+      
+      const tracking = await getTrackingNumberById(Number(id));
+      if (!tracking) {
+        return res.status(404).json({ error: 'Tracking number not found' });
+      }
+
+      const updated = await updateTrackingNumberBox(Number(id), box_id || null);
+      res.json(updated);
+    } catch (error) {
+      console.error('Error updating tracking number box:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
+
 // Manual refresh endpoint for a single tracking number
 router.post('/numbers/:id/refresh', async (req: AuthRequest, res: Response) => {
   try {
@@ -272,13 +309,20 @@ router.post('/numbers/:id/refresh', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Tracking number not found' });
     }
 
+    // Skip if manually set
+    if (tracking.is_manual_status) {
+      return res.status(400).json({ 
+        error: 'Cannot refresh: Status is manually set. Clear manual flag first or update status manually.' 
+      });
+    }
+
     console.log(`Manual refresh requested for ${tracking.tracking_number}`);
     
     const result = await checkRoyalMailStatus(tracking.tracking_number);
     
-    // Update status if changed
+    // Update status if changed (isManual=false for refresh)
     if (result.status !== tracking.current_status || result.statusHeader !== tracking.status_details) {
-      await updateTrackingStatus(tracking.id, result.status, result.statusHeader);
+      await updateTrackingStatus(tracking.id, result.status, result.statusHeader, undefined, false);
       console.log(`Manual refresh updated ${tracking.tracking_number}: ${tracking.current_status} -> ${result.status}`);
     }
     
@@ -340,11 +384,13 @@ router.patch(
         return res.status(404).json({ error: 'Tracking number not found' });
       }
 
+      // Set isManual=true when manually updating status
       await updateTrackingStatus(
         Number(id), 
         status, 
         undefined, 
-        custom_timestamp || null
+        custom_timestamp || null,
+        true  // isManual = true
       );
       
       // Get updated tracking with joins (use large limit to get all, then find the one we need)

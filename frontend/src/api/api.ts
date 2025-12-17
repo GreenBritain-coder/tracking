@@ -16,6 +16,7 @@ export interface TrackingNumber {
   current_status: 'not_scanned' | 'scanned' | 'delivered';
   status_details?: string | null;
   custom_timestamp?: string | null;
+  is_manual_status: boolean;
   created_at: string;
   updated_at: string;
   box_name?: string | null;
@@ -83,6 +84,10 @@ export const api = {
     axios.patch<TrackingNumber>(`${API_URL}/tracking/numbers/${id}/status`, { 
       status,
       custom_timestamp: customTimestamp
+    }),
+  updateTrackingNumberBox: (id: number, boxId?: number | null) =>
+    axios.patch<TrackingNumber>(`${API_URL}/tracking/numbers/${id}/box`, {
+      box_id: boxId,
     }),
 
   // Analytics

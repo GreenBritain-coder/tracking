@@ -9,6 +9,7 @@ export interface TrackingNumber {
   current_status: TrackingStatus;
   status_details: string | null;
   custom_timestamp: Date | null;
+  is_manual_status: boolean;
   created_at: Date;
   updated_at: Date;
 }
@@ -253,11 +254,23 @@ export async function getTrackingNumberByTrackingNumber(trackingNumber: string):
   return result.rows[0] || null;
 }
 
+export async function updateTrackingNumberBox(
+  id: number,
+  boxId: number | null
+): Promise<TrackingNumber | null> {
+  const result = await pool.query(
+    'UPDATE tracking_numbers SET box_id = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
+    [boxId, id]
+  );
+  return result.rows[0] || null;
+}
+
 export async function updateTrackingStatus(
   id: number,
   status: TrackingStatus,
   statusDetails?: string,
-  customTimestamp?: Date | null
+  customTimestamp?: Date | null,
+  isManual: boolean = false
 ): Promise<TrackingNumber | null> {
   const client = await pool.connect();
   try {
@@ -290,10 +303,11 @@ export async function updateTrackingStatus(
          SET current_status = $1,
              status_details = $2,
              custom_timestamp = $3,
+             is_manual_status = $4,
              updated_at = CURRENT_TIMESTAMP
-         WHERE id = $4
+         WHERE id = $5
          RETURNING *`,
-        [status, statusDetails || null, customTimestamp, id]
+        [status, statusDetails || null, customTimestamp, isManual, id]
       );
     } else {
       // Update without changing custom_timestamp (preserve existing value)
@@ -301,10 +315,11 @@ export async function updateTrackingStatus(
         `UPDATE tracking_numbers
          SET current_status = $1,
              status_details = $2,
+             is_manual_status = $3,
              updated_at = CURRENT_TIMESTAMP
-         WHERE id = $3
+         WHERE id = $4
          RETURNING *`,
-        [status, statusDetails || null, id]
+        [status, statusDetails || null, isManual, id]
       );
     }
 
@@ -326,7 +341,7 @@ export async function updateTrackingStatus(
     const timestamp = new Date().toISOString();
 
     if (oldStatus !== status) {
-      console.log(`[${timestamp}] STATUS_CHANGE: ${trackingNumber} - ${oldStatus} → ${status}${statusDetails ? ` (${statusDetails})` : ''}`);
+      console.log(`[${timestamp}] STATUS_CHANGE: ${trackingNumber} - ${oldStatus} → ${status}${statusDetails ? ` (${statusDetails})` : ''}${isManual ? ' [MANUAL]' : ''}`);
     } else if (oldStatusDetails !== (statusDetails || null)) {
       console.log(`[${timestamp}] DETAILS_UPDATE: ${trackingNumber} - Status details updated: "${oldStatusDetails || '(empty)'}" → "${statusDetails || '(empty)'}"`);
     }

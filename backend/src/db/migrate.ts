@@ -99,6 +99,19 @@ async function migrate() {
       END $$;
     `);
 
+    // Add is_manual_status column if it doesn't exist
+    await pool.query(`
+      DO $$ 
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name='tracking_numbers' AND column_name='is_manual_status'
+        ) THEN
+          ALTER TABLE tracking_numbers ADD COLUMN is_manual_status BOOLEAN DEFAULT FALSE;
+        END IF;
+      END $$;
+    `);
+
     // Create status_history table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS status_history (
