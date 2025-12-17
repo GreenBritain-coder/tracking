@@ -35,7 +35,7 @@ interface TrackingDetail {
   scan_to_delivery_hours: number | null;
 }
 
-type SortOption = 'sent_out_date' | 'name' | 'created_at';
+type SortOption = 'sent_out_date' | 'name_asc' | 'name_desc' | 'created_at';
 
 export default function Analytics() {
   const [boxAnalytics, setBoxAnalytics] = useState<BoxAnalytics[]>([]);
@@ -106,8 +106,11 @@ export default function Analytics() {
           return dateA - dateB; // Ascending (oldest first)
         });
         break;
-      case 'name':
+      case 'name_asc':
         sorted.sort((a, b) => a.name.localeCompare(b.name));
+        break;
+      case 'name_desc':
+        sorted.sort((a, b) => b.name.localeCompare(a.name));
         break;
       case 'created_at':
         sorted.sort((a, b) => {
@@ -176,7 +179,8 @@ export default function Analytics() {
               onChange={(e) => setSortBy(e.target.value as SortOption)}
             >
               <option value="sent_out_date">Sent Out Date (Default)</option>
-              <option value="name">Name</option>
+              <option value="name_asc">Name (Ascending)</option>
+              <option value="name_desc">Name (Descending)</option>
               <option value="created_at">Added Date/Time</option>
             </select>
           </label>
