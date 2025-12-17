@@ -5,6 +5,8 @@ import './Analytics.css';
 interface BoxAnalytics {
   id: number;
   name: string;
+  created_at: string;
+  sent_out_date: string | null;
   total_items: number;
   not_scanned_count: number;
   scanned_count: number;
@@ -33,6 +35,8 @@ interface TrackingDetail {
   scan_to_delivery_hours: number | null;
 }
 
+type SortOption = 'sent_out_date' | 'name' | 'created_at';
+
 export default function Analytics() {
   const [boxAnalytics, setBoxAnalytics] = useState<BoxAnalytics[]>([]);
   const [overview, setOverview] = useState<OverviewAnalytics | null>(null);
@@ -42,6 +46,7 @@ export default function Analytics() {
     tracking_numbers: TrackingDetail[];
   } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [sortBy, setSortBy] = useState<SortOption>('sent_out_date');
 
   useEffect(() => {
     loadAnalytics();
@@ -91,6 +96,32 @@ export default function Analytics() {
     return `${days}d ${remainingHours.toFixed(1)}h`;
   };
 
+  const sortBoxes = (boxes: BoxAnalytics[], sortOption: SortOption): BoxAnalytics[] => {
+    const sorted = [...boxes];
+    switch (sortOption) {
+      case 'sent_out_date':
+        sorted.sort((a, b) => {
+          const dateA = a.sent_out_date ? new Date(a.sent_out_date).getTime() : new Date(a.created_at).getTime();
+          const dateB = b.sent_out_date ? new Date(b.sent_out_date).getTime() : new Date(b.created_at).getTime();
+          return dateA - dateB; // Ascending (oldest first)
+        });
+        break;
+      case 'name':
+        sorted.sort((a, b) => a.name.localeCompare(b.name));
+        break;
+      case 'created_at':
+        sorted.sort((a, b) => {
+          const dateA = new Date(a.created_at).getTime();
+          const dateB = new Date(b.created_at).getTime();
+          return dateA - dateB; // Ascending (oldest first)
+        });
+        break;
+    }
+    return sorted;
+  };
+
+  const sortedBoxAnalytics = sortBoxes(boxAnalytics, sortBy);
+
   if (loading) {
     return <div className="loading">Loading analytics...</div>;
   }
@@ -136,9 +167,22 @@ export default function Analytics() {
       )}
 
       <div className="boxes-section">
-        <h3>Box Analytics</h3>
+        <div className="boxes-section-header">
+          <h3>Box Analytics</h3>
+          <label className="sort-control">
+            <span>Sort by:</span>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as SortOption)}
+            >
+              <option value="sent_out_date">Sent Out Date (Default)</option>
+              <option value="name">Name</option>
+              <option value="created_at">Added Date/Time</option>
+            </select>
+          </label>
+        </div>
         <div className="boxes-grid">
-          {boxAnalytics.map((box) => (
+          {sortedBoxAnalytics.map((box) => (
             <div
               key={box.id}
               className={`box-card ${selectedBox === box.id ? 'selected' : ''}`}

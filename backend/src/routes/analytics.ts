@@ -14,6 +14,8 @@ router.get('/boxes', async (req, res) => {
       SELECT 
         b.id,
         b.name,
+        b.created_at,
+        MIN(t.created_at) as sent_out_date,
         COUNT(t.id) as total_items,
         COUNT(CASE WHEN t.current_status = 'not_scanned' THEN 1 END) as not_scanned_count,
         COUNT(CASE WHEN t.current_status = 'scanned' THEN 1 END) as scanned_count,
@@ -44,8 +46,8 @@ router.get('/boxes', async (req, res) => {
         ) as avg_drop_to_scan_hours
       FROM boxes b
       LEFT JOIN tracking_numbers t ON b.id = t.box_id
-      GROUP BY b.id, b.name
-      ORDER BY b.created_at DESC
+      GROUP BY b.id, b.name, b.created_at
+      ORDER BY COALESCE(MIN(t.created_at), b.created_at) ASC
     `);
     
     res.json(result.rows);
