@@ -47,6 +47,22 @@ app.use('/api/webhook', (req: any, res, next) => {
 // JSON middleware for other routes
 app.use(express.json());
 
+// Debug middleware - log all requests to help diagnose routing issues
+// Place BEFORE routes so we can see ALL requests including SSE
+app.use((req, res, next) => {
+  // Log all requests, especially SSE
+  if (req.path.includes('/logs/stream')) {
+    console.log(`[SSE REQUEST] ${new Date().toISOString()} ${req.method} ${req.path} ${req.url}`);
+    console.log(`[SSE REQUEST] Origin: ${req.headers.origin}`);
+    console.log(`[SSE REQUEST] User-Agent: ${req.headers['user-agent']}`);
+    console.log(`[SSE REQUEST] Has token: ${!!req.query.token}`);
+    console.log(`[SSE REQUEST] Query params:`, Object.keys(req.query));
+  } else {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} ${req.url}`);
+  }
+  next();
+});
+
 // Health check
 app.get('/health', async (req, res) => {
   try {
@@ -63,21 +79,6 @@ app.use('/api/tracking', trackingRoutes);
 app.use('/api/analytics', analyticsRoutes);
 // Webhook routes (no authentication required - uses signature verification)
 app.use('/api/webhook', webhookRoutes);
-
-// Debug middleware - log all requests to help diagnose routing issues
-// Place BEFORE routes so we can see SSE requests
-app.use((req, res, next) => {
-  // Log all requests, especially SSE
-  if (req.path.includes('/logs/stream')) {
-    console.log(`[SSE REQUEST] ${new Date().toISOString()} ${req.method} ${req.path} ${req.url}`);
-    console.log(`[SSE REQUEST] Origin: ${req.headers.origin}`);
-    console.log(`[SSE REQUEST] User-Agent: ${req.headers['user-agent']}`);
-    console.log(`[SSE REQUEST] Has token: ${!!req.query.token}`);
-  } else {
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} ${req.url}`);
-  }
-  next();
-});
 
 // 404 handler - return JSON instead of blank page
 app.use((req, res) => {

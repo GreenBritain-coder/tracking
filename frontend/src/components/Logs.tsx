@@ -75,8 +75,11 @@ export default function Logs() {
       // Create new SSE connection
       const streamUrl = `${API_URL}/tracking/logs/stream?token=${encodeURIComponent(token)}`;
       console.log('Attempting SSE connection to:', streamUrl.replace(/token=[^&]+/, 'token=***'));
+      console.log('API_URL:', API_URL);
+      console.log('Full URL (sanitized):', streamUrl.replace(/token=[^&]+/, 'token=***'));
       
       const eventSource = new EventSource(streamUrl);
+      console.log('EventSource created, initial readyState:', eventSource.readyState, '(0=CONNECTING)');
       
       eventSourceRef.current = eventSource;
       
@@ -119,12 +122,20 @@ export default function Logs() {
       
       // Also check readyState immediately after a short delay
       // Sometimes onopen doesn't fire but readyState becomes OPEN
-      setTimeout(() => {
-        if (eventSource.readyState === EventSource.OPEN) {
-          console.log('✓ EventSource readyState is OPEN (detected via timeout check)');
-          setIsConnected(true);
-        }
-      }, 1000);
+      const timeoutChecks = [500, 1000, 2000, 3000];
+      timeoutChecks.forEach((delay) => {
+        setTimeout(() => {
+          const currentState = eventSource.readyState;
+          console.log(`[${delay}ms] EventSource readyState check:`, currentState, currentState === EventSource.OPEN ? 'OPEN' : currentState === EventSource.CONNECTING ? 'CONNECTING' : 'CLOSED');
+          if (currentState === EventSource.OPEN) {
+            console.log(`✓ EventSource readyState is OPEN (detected at ${delay}ms)`);
+            setIsConnected(true);
+          } else if (currentState === EventSource.CLOSED && delay >= 2000) {
+            console.error(`✗ EventSource is CLOSED after ${delay}ms - connection failed`);
+            setIsConnected(false);
+          }
+        }, delay);
+      });
       
       eventSource.onmessage = (event) => {
         try {
