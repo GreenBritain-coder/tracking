@@ -11,6 +11,7 @@ import {
   bulkCreateTrackingNumbers,
   deleteAllTrackingNumbers,
   updateTrackingNumberBox,
+  getTrackingEvents,
 } from '../models/tracking';
 import { createBox, getAllBoxes, getBoxById, updateBox, deleteBox, getKingBoxes } from '../models/box';
 import { getStatusHistory, getRecentStatusChanges } from '../models/statusHistory';
@@ -659,6 +660,12 @@ router.post('/numbers/:id/refresh', async (req: AuthRequest, res: Response) => {
     if (result.status !== tracking.current_status || result.statusHeader !== tracking.status_details) {
       await updateTrackingStatus(tracking.id, result.status, result.statusHeader, undefined, false, result.trackingmoreStatus);
       console.log(`Manual refresh updated ${tracking.tracking_number}: ${tracking.current_status} -> ${result.status}`);
+    }
+    
+    // Save tracking events if available
+    if (result.events && result.events.length > 0) {
+      await saveTrackingEvents(tracking.id, result.events);
+      console.log(`Saved ${result.events.length} events for ${tracking.tracking_number}`);
     }
     
     // Get updated tracking

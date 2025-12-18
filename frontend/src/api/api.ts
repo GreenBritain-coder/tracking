@@ -36,6 +36,17 @@ export interface StatusChangeLog {
   change_type: 'status_change' | 'details_update';
 }
 
+export interface TrackingEvent {
+  id: number;
+  tracking_number_id: number;
+  event_date: string;
+  location: string | null;
+  status: string | null;
+  description: string | null;
+  checkpoint_status: string | null;
+  created_at: string;
+}
+
 export const api = {
   // Boxes
   getBoxes: (kingBoxId?: number | null) => {

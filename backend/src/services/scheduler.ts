@@ -1,5 +1,5 @@
 import cron from 'node-cron';
-import { getAllTrackingNumbers, updateTrackingStatus } from '../models/tracking';
+import { getAllTrackingNumbers, updateTrackingStatus, saveTrackingEvents } from '../models/tracking';
 import { checkRoyalMailStatus } from './scraper';
 
 let isRunning = false;
@@ -60,6 +60,13 @@ export async function updateAllTrackingStatuses() {
           // Store the statusHeader (like "We've got it") in the status_details field
           // isManual=false for automatic updates
           await updateTrackingStatus(tn.id, result.status, result.statusHeader, undefined, false, result.trackingmoreStatus);
+          
+          // Save tracking events if available
+          if (result.events && result.events.length > 0) {
+            await saveTrackingEvents(tn.id, result.events);
+            console.log(`Saved ${result.events.length} events for ${tn.tracking_number}`);
+          }
+          
           updated++;
           if (statusChanged) {
             console.log(

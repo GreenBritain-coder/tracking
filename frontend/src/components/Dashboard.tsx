@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, TrackingNumber, Box } from '../api/api';
+import { api, TrackingNumber, Box, TrackingEvent } from '../api/api';
 import './Dashboard.css';
 
 const STATUS_COLORS = {
@@ -43,6 +43,9 @@ export default function Dashboard() {
     delivered: 0,
     total: 0
   });
+  const [selectedTrackingId, setSelectedTrackingId] = useState<number | null>(null);
+  const [trackingEvents, setTrackingEvents] = useState<TrackingEvent[]>([]);
+  const [loadingEvents, setLoadingEvents] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -119,9 +122,36 @@ export default function Dashboard() {
     try {
       await api.refreshTrackingNumber(id);
       loadData(); // Reload data to show updated status
+      // Reload events if modal is open
+      if (selectedTrackingId === id) {
+        loadTrackingEvents(id);
+      }
     } catch (err: any) {
       alert(err.response?.data?.error || 'Failed to refresh tracking number');
     }
+  };
+
+  const loadTrackingEvents = async (id: number) => {
+    try {
+      setLoadingEvents(true);
+      const response = await api.getTrackingEvents(id);
+      setTrackingEvents(response.data);
+    } catch (err: any) {
+      console.error('Failed to load tracking events:', err);
+      setTrackingEvents([]);
+    } finally {
+      setLoadingEvents(false);
+    }
+  };
+
+  const handleTrackingNumberClick = (id: number) => {
+    setSelectedTrackingId(id);
+    loadTrackingEvents(id);
+  };
+
+  const closeEventModal = () => {
+    setSelectedTrackingId(null);
+    setTrackingEvents([]);
   };
 
 
@@ -500,7 +530,13 @@ export default function Dashboard() {
                   </td>
                   <td className="status-details">{tn.status_details || '-'}</td>
                   <td className="tracking-number">
-                    {tn.tracking_number}
+                    <span 
+                      style={{ cursor: 'pointer', textDecoration: 'underline', color: '#3498db' }}
+                      onClick={() => handleTrackingNumberClick(tn.id)}
+                      title="Click to view event timeline"
+                    >
+                      {tn.tracking_number}
+                    </span>
                     {tn.is_manual_status && (
                       <span style={{ marginLeft: '0.5rem', fontSize: '0.75rem', color: '#7f8c8d' }} title="Status manually set - will not auto-update">
                         🔒 Manual
@@ -770,6 +806,67 @@ export default function Dashboard() {
             >
               Last
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Event Timeline Modal */}
+      {selectedTrackingId && (
+        <div className="modal-overlay" onClick={closeEventModal}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>
+                📦 Event Timeline
+                {trackingNumbers.find(tn => tn.id === selectedTrackingId)?.tracking_number && (
+                  <span style={{ marginLeft: '1rem', fontSize: '1rem', fontWeight: 'normal', color: '#7f8c8d' }}>
+                    {trackingNumbers.find(tn => tn.id === selectedTrackingId)?.tracking_number}
+                  </span>
+                )}
+              </h2>
+              <button className="modal-close" onClick={closeEventModal}>×</button>
+            </div>
+            <div className="modal-body">
+              {loadingEvents ? (
+                <div className="loading">Loading events...</div>
+              ) : trackingEvents.length === 0 ? (
+                <div className="empty-state">
+                  <p>No tracking events available yet.</p>
+                  <p style={{ fontSize: '0.9rem', color: '#7f8c8d', marginTop: '0.5rem' }}>
+                    Events will appear here once the package starts moving.
+                  </p>
+                </div>
+              ) : (
+                <div className="event-timeline">
+                  {trackingEvents.map((event, index) => (
+                    <div key={event.id} className="event-item">
+                      <div className="event-marker"></div>
+                      <div className="event-content">
+                        <div className="event-date">
+                          {new Date(event.event_date).toLocaleString()}
+                        </div>
+                        {event.location && (
+                          <div className="event-location">
+                            📍 {event.location}
+                          </div>
+                        )}
+                        {event.description && (
+                          <div className="event-description">
+                            {event.description}
+                          </div>
+                        )}
+                        {event.checkpoint_status && (
+                          <div className="event-status">
+                            <span className="status-badge-small">
+                              {event.checkpoint_status}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

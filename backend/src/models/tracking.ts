@@ -2,6 +2,17 @@ import { pool } from '../db/connection';
 
 export type TrackingStatus = 'not_scanned' | 'scanned' | 'delivered';
 
+export interface TrackingEvent {
+  id: number;
+  tracking_number_id: number;
+  event_date: Date;
+  location: string | null;
+  status: string | null;
+  description: string | null;
+  checkpoint_status: string | null;
+  created_at: Date;
+}
+
 export interface TrackingNumber {
   id: number;
   tracking_number: string;
@@ -472,5 +483,76 @@ export async function bulkCreateTrackingNumbers(
   } finally {
     client.release();
   }
+}
+
+/**
+ * Save tracking events from TrackingMore API
+ */
+export async function saveTrackingEvents(
+  trackingNumberId: number,
+  events: Array<{
+    event_date: Date | string;
+    location?: string | null;
+    status?: string | null;
+    description?: string | null;
+    checkpoint_status?: string | null;
+  }>
+): Promise<void> {
+  if (!events || events.length === 0) {
+    return;
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Delete existing events for this tracking number to avoid duplicates
+    await client.query(
+      'DELETE FROM tracking_events WHERE tracking_number_id = $1',
+      [trackingNumberId]
+    );
+
+    // Insert new events
+    for (const event of events) {
+      const eventDate = event.event_date instanceof Date 
+        ? event.event_date 
+        : new Date(event.event_date);
+      
+      await client.query(
+        `INSERT INTO tracking_events 
+         (tracking_number_id, event_date, location, status, description, checkpoint_status)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          trackingNumberId,
+          eventDate,
+          event.location || null,
+          event.status || null,
+          event.description || null,
+          event.checkpoint_status || null
+        ]
+      );
+    }
+
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Get tracking events for a tracking number
+ */
+export async function getTrackingEvents(trackingNumberId: number): Promise<TrackingEvent[]> {
+  const result = await pool.query(
+    `SELECT * FROM tracking_events 
+     WHERE tracking_number_id = $1 
+     ORDER BY event_date ASC`,
+    [trackingNumberId]
+  );
+  
+  return result.rows;
 }
 

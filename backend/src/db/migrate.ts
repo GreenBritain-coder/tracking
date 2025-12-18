@@ -163,6 +163,20 @@ async function migrate() {
       )
     `);
 
+    // Create tracking_events table for detailed event timeline
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS tracking_events (
+        id SERIAL PRIMARY KEY,
+        tracking_number_id INTEGER NOT NULL REFERENCES tracking_numbers(id) ON DELETE CASCADE,
+        event_date TIMESTAMP NOT NULL,
+        location VARCHAR(255),
+        status VARCHAR(100),
+        description TEXT,
+        checkpoint_status VARCHAR(100),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // Create indexes
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_tracking_numbers_box_id ON tracking_numbers(box_id);
@@ -170,6 +184,8 @@ async function migrate() {
       CREATE INDEX IF NOT EXISTS idx_tracking_numbers_status ON tracking_numbers(current_status);
       CREATE INDEX IF NOT EXISTS idx_status_history_tracking_id ON status_history(tracking_number_id);
       CREATE INDEX IF NOT EXISTS idx_status_history_timestamp ON status_history(timestamp);
+      CREATE INDEX IF NOT EXISTS idx_tracking_events_tracking_id ON tracking_events(tracking_number_id);
+      CREATE INDEX IF NOT EXISTS idx_tracking_events_date ON tracking_events(event_date);
     `);
 
     // Nullify postbox_id in tracking_numbers (migrate away from postboxes)

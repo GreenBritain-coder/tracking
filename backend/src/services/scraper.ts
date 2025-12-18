@@ -12,6 +12,13 @@ function parseTrackingMoreResponse(data: any, trackingNumber: string): {
   details?: string;
   statusHeader?: string;
   trackingmoreStatus?: string;
+  events?: Array<{
+    event_date: Date | string;
+    location?: string | null;
+    status?: string | null;
+    description?: string | null;
+    checkpoint_status?: string | null;
+  }>;
 } {
   try {
     // Log the full response structure for debugging
@@ -100,6 +107,22 @@ function parseTrackingMoreResponse(data: any, trackingNumber: string): {
                    trackingData?.origin_info?.tracking_info ||
                    [];
     
+    // Parse events into structured format for storage
+    const parsedEvents = events.map((e: any) => {
+      const eventDate = e.checkpoint_date || e.date || e.track_date || e.time || e.time_iso || e.track_time;
+      const location = e.track_location || e.location || e.checkpoint_location || null;
+      const description = e.tracking_detail || e.details || e.track_detail || e.description || null;
+      const checkpointStatus = e.checkpoint_delivery_status || e.status || e.track_status || e.event || null;
+      
+      return {
+        event_date: eventDate ? new Date(eventDate) : new Date(),
+        location: location,
+        status: checkpointStatus,
+        description: description,
+        checkpoint_status: checkpointStatus
+      };
+    }).filter((e: any) => e.event_date); // Filter out events without dates
+    
     const details = events.length > 0 
       ? JSON.stringify(events.map((e: any) => ({
           date: e.checkpoint_date || e.date || e.track_date || e.time,
@@ -120,6 +143,7 @@ function parseTrackingMoreResponse(data: any, trackingNumber: string): {
           details,
           statusHeader: 'Pending',
           trackingmoreStatus,
+          events: parsedEvents,
         };
       }
     }
@@ -134,6 +158,7 @@ function parseTrackingMoreResponse(data: any, trackingNumber: string): {
         details,
         statusHeader: statusHeader || 'Delivered',
         trackingmoreStatus,
+        events: parsedEvents,
       };
     } else if (statusLower === 'transit' ||
                statusLower === 'pickup' ||
@@ -154,6 +179,7 @@ function parseTrackingMoreResponse(data: any, trackingNumber: string): {
         details,
         statusHeader: statusHeader || 'In Transit',
         trackingmoreStatus,
+        events: parsedEvents,
       };
     } else if (statusLower.includes('not found') ||
                statusLower.includes('no information') ||
@@ -164,6 +190,7 @@ function parseTrackingMoreResponse(data: any, trackingNumber: string): {
         details,
         statusHeader: statusHeader || 'Not Scanned',
         trackingmoreStatus,
+        events: parsedEvents,
       };
     } else {
       // Default: if we have any tracking info, consider it scanned
@@ -174,6 +201,7 @@ function parseTrackingMoreResponse(data: any, trackingNumber: string): {
           details,
           statusHeader: statusHeader || 'In Transit',
           trackingmoreStatus,
+          events: parsedEvents,
         };
       } else {
         console.log(`[${trackingNumber}] TrackingMore: No tracking info, defaulting to NOT_SCANNED`);
@@ -182,6 +210,7 @@ function parseTrackingMoreResponse(data: any, trackingNumber: string): {
           details,
           statusHeader: statusHeader || 'Not Scanned',
           trackingmoreStatus,
+          events: parsedEvents,
         };
       }
     }
