@@ -535,12 +535,14 @@ router.options('/logs/stream', (req: Request, res: Response) => {
 // SSE endpoint for real-time log updates
 // Note: EventSource doesn't support custom headers, so we accept token as query param
 router.get('/logs/stream', async (req: Request, res: Response) => {
-  console.log('SSE connection attempt:', {
-    method: req.method,
-    url: req.url,
-    origin: req.headers.origin,
-    userAgent: req.headers['user-agent']
-  });
+  console.log('=== SSE CONNECTION ATTEMPT ===');
+  console.log('Method:', req.method);
+  console.log('URL:', req.url);
+  console.log('Path:', req.path);
+  console.log('Origin:', req.headers.origin);
+  console.log('User-Agent:', req.headers['user-agent']);
+  console.log('Query params:', Object.keys(req.query));
+  console.log('Has token in query:', !!req.query.token);
   
   // Get token from query parameter (EventSource limitation)
   const token = req.query.token as string;

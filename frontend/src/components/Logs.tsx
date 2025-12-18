@@ -113,14 +113,35 @@ export default function Logs() {
       eventSource.onerror = (error) => {
         console.error('SSE connection error:', error);
         console.error('EventSource readyState:', eventSource.readyState);
+        console.error('EventSource URL:', eventSource.url.replace(/token=[^&]+/, 'token=***'));
+        console.error('EventSource withCredentials:', eventSource.withCredentials);
+        
         // readyState: 0 = CONNECTING, 1 = OPEN, 2 = CLOSED
         if (eventSource.readyState === EventSource.CLOSED) {
-          console.error('SSE connection closed. Check:');
-          console.error('  1. Is the backend running?');
-          console.error('  2. Is the token valid?');
-          console.error('  3. Are CORS headers configured correctly?');
-          console.error('  4. Check browser console for network errors');
+          console.error('SSE connection closed/failed. Check:');
+          console.error('  1. Open Network tab and look for the /logs/stream request');
+          console.error('  2. Check the response status code (should be 200)');
+          console.error('  3. Check for CORS errors in console');
+          console.error('  4. Verify token is valid');
           console.error('  5. API_URL:', API_URL);
+          console.error('  6. Full URL:', eventSource.url.replace(/token=[^&]+/, 'token=***'));
+          
+          // Try to get more info from the network request
+          fetch(eventSource.url, {
+            method: 'GET',
+            headers: {
+              'Accept': 'text/event-stream'
+            }
+          }).then(response => {
+            console.error('Direct fetch test - Status:', response.status);
+            console.error('Direct fetch test - Headers:', Object.fromEntries(response.headers.entries()));
+            return response.text();
+          }).then(text => {
+            console.error('Direct fetch test - Response preview:', text.substring(0, 200));
+          }).catch(fetchError => {
+            console.error('Direct fetch test - Error:', fetchError);
+          });
+          
           setIsConnected(false);
         } else if (eventSource.readyState === EventSource.CONNECTING) {
           console.log('SSE reconnecting...');

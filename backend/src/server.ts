@@ -13,8 +13,14 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware
-app.use(cors());
+// Middleware - CORS configuration
+app.use(cors({
+  origin: true, // Allow all origins (or specify your frontend domain)
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control'],
+  exposedHeaders: ['Content-Type']
+}));
 
 // Webhook routes need raw body for signature verification
 // Register webhook route middleware BEFORE general JSON middleware
@@ -59,8 +65,17 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/webhook', webhookRoutes);
 
 // Debug middleware - log all requests to help diagnose routing issues
+// Place BEFORE routes so we can see SSE requests
 app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} ${req.url}`);
+  // Log all requests, especially SSE
+  if (req.path.includes('/logs/stream')) {
+    console.log(`[SSE REQUEST] ${new Date().toISOString()} ${req.method} ${req.path} ${req.url}`);
+    console.log(`[SSE REQUEST] Origin: ${req.headers.origin}`);
+    console.log(`[SSE REQUEST] User-Agent: ${req.headers['user-agent']}`);
+    console.log(`[SSE REQUEST] Has token: ${!!req.query.token}`);
+  } else {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} ${req.url}`);
+  }
   next();
 });
 
