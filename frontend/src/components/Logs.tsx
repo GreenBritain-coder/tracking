@@ -39,14 +39,15 @@ export default function Logs() {
     }
     
     // Create new SSE connection
-    const eventSource = new EventSource(
-      `${API_URL}/tracking/logs/stream?token=${encodeURIComponent(token)}`
-    );
+    const streamUrl = `${API_URL}/tracking/logs/stream?token=${encodeURIComponent(token)}`;
+    console.log('Attempting SSE connection to:', streamUrl.replace(/token=[^&]+/, 'token=***'));
+    
+    const eventSource = new EventSource(streamUrl);
     
     eventSourceRef.current = eventSource;
     
     eventSource.onopen = () => {
-      console.log('SSE connection opened');
+      console.log('✓ SSE connection opened successfully');
       setIsConnected(true);
     };
     
@@ -77,7 +78,18 @@ export default function Logs() {
     
     eventSource.onerror = (error) => {
       console.error('SSE connection error:', error);
-      setIsConnected(false);
+      console.error('EventSource readyState:', eventSource.readyState);
+      // readyState: 0 = CONNECTING, 1 = OPEN, 2 = CLOSED
+      if (eventSource.readyState === EventSource.CLOSED) {
+        console.error('SSE connection closed. Check:');
+        console.error('  1. Is the backend running?');
+        console.error('  2. Is the token valid?');
+        console.error('  3. Are CORS headers configured correctly?');
+        console.error('  4. Check browser console for network errors');
+        setIsConnected(false);
+      } else if (eventSource.readyState === EventSource.CONNECTING) {
+        console.log('SSE reconnecting...');
+      }
       // EventSource will automatically try to reconnect
     };
     

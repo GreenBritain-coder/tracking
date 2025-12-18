@@ -91,6 +91,7 @@ app.listen(PORT, () => {
   console.log('  - GET /health');
   console.log('  - /api/auth/*');
   console.log('  - /api/tracking/*');
+  console.log('    - GET /api/tracking/logs/stream (SSE)');
   console.log('  - /api/analytics/*');
   console.log('  - GET /api/webhook/');
   console.log('  - GET /api/webhook/trackingmore/test');

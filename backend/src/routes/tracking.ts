@@ -509,13 +509,35 @@ router.get('/logs/status-changes', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// Handle OPTIONS for SSE endpoint (CORS preflight)
+router.options('/logs/stream', (req: Request, res: Response) => {
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Cache-Control');
+  res.status(204).end();
+});
+
 // SSE endpoint for real-time log updates
 // Note: EventSource doesn't support custom headers, so we accept token as query param
 router.get('/logs/stream', async (req: Request, res: Response) => {
+  console.log('SSE connection attempt:', {
+    method: req.method,
+    url: req.url,
+    origin: req.headers.origin,
+    userAgent: req.headers['user-agent']
+  });
+  
   // Get token from query parameter (EventSource limitation)
   const token = req.query.token as string;
   
   if (!token) {
+    console.error('SSE connection rejected: No token provided');
     return res.status(401).json({ error: 'Token required' });
   }
   
@@ -523,17 +545,28 @@ router.get('/logs/stream', async (req: Request, res: Response) => {
   const payload = verifyToken(token);
   
   if (!payload) {
+    console.error('SSE connection rejected: Invalid token');
     return res.status(401).json({ error: 'Invalid token' });
   }
+  
+  console.log('SSE connection accepted for user:', payload.email);
   
   // Set headers for SSE
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
-  // CORS is handled by the main app middleware, but we set it here for clarity
-  res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  
+  // CORS headers for SSE (must be set before any writes)
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Cache-Control');
   
   // Send initial connection message
   res.write(`data: ${JSON.stringify({ type: 'connected', message: 'Stream connected', timestamp: new Date().toISOString() })}\n\n`);
@@ -604,7 +637,7 @@ router.get('/logs/stream', async (req: Request, res: Response) => {
   // Clean up on client disconnect
   req.on('close', () => {
     clearInterval(checkInterval);
-    console.log('SSE client disconnected');
+    console.log('SSE client disconnected for user:', payload.email);
     res.end();
   });
   
@@ -613,6 +646,12 @@ router.get('/logs/stream', async (req: Request, res: Response) => {
     console.error('SSE request error:', error);
     clearInterval(checkInterval);
     res.end();
+  });
+  
+  // Handle response errors
+  res.on('error', (error) => {
+    console.error('SSE response error:', error);
+    clearInterval(checkInterval);
   });
 });
 
