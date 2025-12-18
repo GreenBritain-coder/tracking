@@ -112,8 +112,9 @@ export default function Logs() {
       }, 500);
       
       eventSource.onopen = () => {
-        console.log('✓ SSE connection opened successfully');
+        console.log('✓ SSE connection opened successfully (onopen event)');
         console.log('EventSource readyState:', eventSource.readyState, '(should be 1 = OPEN)');
+        console.log('EventSource URL:', eventSource.url.replace(/token=[^&]+/, 'token=***'));
         setIsConnected(true);
         if (stateCheckInterval) {
           clearInterval(stateCheckInterval);
@@ -156,7 +157,8 @@ export default function Logs() {
             console.debug('SSE heartbeat received');
             setIsConnected(true); // Ensure we're marked as connected on heartbeat
           } else if (data.type === 'connected') {
-            console.log('SSE connected:', data.message);
+            console.log('✓ SSE connected message received:', data.message);
+            console.log('Setting isConnected to true');
             setIsConnected(true);
           } else if (data.type === 'error') {
             console.error('SSE error:', data.message);

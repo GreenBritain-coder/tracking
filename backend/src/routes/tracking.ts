@@ -105,17 +105,26 @@ router.get('/logs/stream', async (req: Request, res: Response) => {
   res.setHeader('Access-Control-Allow-Headers', 'Cache-Control');
   
   // Send initial connection message and flush immediately
-  const initialMessage = `data: ${JSON.stringify({ type: 'connected', message: 'Stream connected', timestamp: new Date().toISOString() })}\n\n`;
-  res.write(initialMessage);
+  // Use proper SSE format: data: followed by JSON, then double newline
+  const initialData = { type: 'connected', message: 'Stream connected', timestamp: new Date().toISOString() };
+  const initialMessage = `data: ${JSON.stringify(initialData)}\n\n`;
   
-  // Flush the response to ensure it's sent immediately
-  // Access the underlying Node.js response object for flush()
-  const nodeRes = res as any;
-  if (typeof nodeRes.flush === 'function') {
-    nodeRes.flush();
+  try {
+    res.write(initialMessage);
+    console.log('SSE initial message written:', initialData);
+    
+    // Flush the response to ensure it's sent immediately
+    // Access the underlying Node.js response object for flush()
+    const nodeRes = res as any;
+    if (typeof nodeRes.flush === 'function') {
+      nodeRes.flush();
+      console.log('SSE response flushed');
+    }
+    
+    console.log('SSE initial message sent, connection should be open');
+  } catch (error) {
+    console.error('Error sending initial SSE message:', error);
   }
-  
-  console.log('SSE initial message sent, connection should be open');
   
   let lastCheck = new Date(Date.now() - 60000); // Start from 1 minute ago
   let heartbeatCount = 0;
