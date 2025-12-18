@@ -473,6 +473,22 @@ router.get('/numbers/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// Get tracking events timeline for a tracking number
+router.get('/numbers/:id/events', async (req: AuthRequest, res: Response) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({ error: 'Invalid ID' });
+    }
+    
+    const events = await getTrackingEvents(id);
+    res.json(events);
+  } catch (error) {
+    console.error('Error fetching tracking events:', error);
+    res.status(500).json({ error: 'Failed to fetch tracking events' });
+  }
+});
+
 router.post(
   '/numbers',
   [
