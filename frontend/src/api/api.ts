@@ -131,6 +131,10 @@ export const api = {
     axios.patch<TrackingNumber>(`${API_URL}/tracking/numbers/${id}/box`, {
       box_id: boxId,
     }),
+  getTrackingNumberById: (id: number) =>
+    axios.get<TrackingNumber>(`${API_URL}/tracking/numbers/${id}`),
+  getTrackingEvents: (id: number) =>
+    axios.get<TrackingEvent[]>(`${API_URL}/tracking/numbers/${id}/events`),
 
   // Analytics
   getBoxAnalytics: () => axios.get(`${API_URL}/analytics/boxes`),
@@ -159,9 +163,5 @@ export const api = {
     if (trackingNumber) params.trackingNumber = trackingNumber;
     return axios.get<StatusChangeLog[]>(`${API_URL}/tracking/logs/status-changes`, { params });
   },
-
-  // Tracking Events
-  getTrackingEvents: (id: number) =>
-    axios.get<TrackingEvent[]>(`${API_URL}/tracking/numbers/${id}/events`),
 };
 
