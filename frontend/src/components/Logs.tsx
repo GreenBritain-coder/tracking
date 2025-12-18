@@ -30,68 +30,104 @@ export default function Logs() {
     const token = localStorage.getItem('token');
     
     if (!token) {
+      console.warn('No token found, skipping SSE connection');
+      setIsConnected(false);
       return;
     }
+    
+    // Test if endpoint is accessible first
+    const testConnection = async () => {
+      try {
+        const testUrl = `${API_URL}/tracking/logs/stream/test`;
+        const response = await fetch(testUrl, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        if (!response.ok) {
+          console.error('SSE test endpoint failed:', response.status, response.statusText);
+          setIsConnected(false);
+          return false;
+        }
+        const data = await response.json();
+        console.log('SSE endpoint test passed:', data);
+        return true;
+      } catch (error) {
+        console.error('SSE endpoint test failed:', error);
+        setIsConnected(false);
+        return false;
+      }
+    };
     
     // Close existing connection if any
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
+      eventSourceRef.current = null;
     }
     
-    // Create new SSE connection
-    const streamUrl = `${API_URL}/tracking/logs/stream?token=${encodeURIComponent(token)}`;
-    console.log('Attempting SSE connection to:', streamUrl.replace(/token=[^&]+/, 'token=***'));
-    
-    const eventSource = new EventSource(streamUrl);
-    
-    eventSourceRef.current = eventSource;
-    
-    eventSource.onopen = () => {
-      console.log('✓ SSE connection opened successfully');
-      setIsConnected(true);
-    };
-    
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        
-        if (data.type === 'logs' && data.logs && data.logs.length > 0) {
-          // Add all new logs (filters will be applied when rendering)
-          setLogs(prevLogs => {
-            const newLogIds = new Set(data.logs.map((l: StatusChangeLog) => l.id));
-            const filteredPrev = prevLogs.filter(l => !newLogIds.has(l.id));
-            // Add new logs at the beginning, then apply limit
-            return [...data.logs, ...filteredPrev].slice(0, limit * 2); // Keep more in memory for filtering
-          });
-        } else if (data.type === 'heartbeat') {
-          // Connection is alive, just log for debugging
-          console.debug('SSE heartbeat received');
-        } else if (data.type === 'connected') {
-          console.log('SSE connected:', data.message);
-        } else if (data.type === 'error') {
-          console.error('SSE error:', data.message);
+    // Test connection first, then establish SSE
+    testConnection().then((canConnect) => {
+      if (!canConnect) {
+        console.error('Cannot establish SSE connection - endpoint test failed');
+        return;
+      }
+      
+      // Create new SSE connection
+      const streamUrl = `${API_URL}/tracking/logs/stream?token=${encodeURIComponent(token)}`;
+      console.log('Attempting SSE connection to:', streamUrl.replace(/token=[^&]+/, 'token=***'));
+      
+      const eventSource = new EventSource(streamUrl);
+      
+      eventSourceRef.current = eventSource;
+      
+      eventSource.onopen = () => {
+        console.log('✓ SSE connection opened successfully');
+        setIsConnected(true);
+      };
+      
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          
+          if (data.type === 'logs' && data.logs && data.logs.length > 0) {
+            // Add all new logs (filters will be applied when rendering)
+            setLogs(prevLogs => {
+              const newLogIds = new Set(data.logs.map((l: StatusChangeLog) => l.id));
+              const filteredPrev = prevLogs.filter(l => !newLogIds.has(l.id));
+              // Add new logs at the beginning, then apply limit
+              return [...data.logs, ...filteredPrev].slice(0, limit * 2); // Keep more in memory for filtering
+            });
+          } else if (data.type === 'heartbeat') {
+            // Connection is alive, just log for debugging
+            console.debug('SSE heartbeat received');
+          } else if (data.type === 'connected') {
+            console.log('SSE connected:', data.message);
+          } else if (data.type === 'error') {
+            console.error('SSE error:', data.message);
+          }
+        } catch (error) {
+          console.error('Error parsing SSE message:', error);
         }
-      } catch (error) {
-        console.error('Error parsing SSE message:', error);
-      }
-    };
-    
-    eventSource.onerror = (error) => {
-      console.error('SSE connection error:', error);
-      console.error('EventSource readyState:', eventSource.readyState);
-      // readyState: 0 = CONNECTING, 1 = OPEN, 2 = CLOSED
-      if (eventSource.readyState === EventSource.CLOSED) {
-        console.error('SSE connection closed. Check:');
-        console.error('  1. Is the backend running?');
-        console.error('  2. Is the token valid?');
-        console.error('  3. Are CORS headers configured correctly?');
-        console.error('  4. Check browser console for network errors');
-        setIsConnected(false);
-      } else if (eventSource.readyState === EventSource.CONNECTING) {
-        console.log('SSE reconnecting...');
-      }
-      // EventSource will automatically try to reconnect
-    };
+      };
+      
+      eventSource.onerror = (error) => {
+        console.error('SSE connection error:', error);
+        console.error('EventSource readyState:', eventSource.readyState);
+        // readyState: 0 = CONNECTING, 1 = OPEN, 2 = CLOSED
+        if (eventSource.readyState === EventSource.CLOSED) {
+          console.error('SSE connection closed. Check:');
+          console.error('  1. Is the backend running?');
+          console.error('  2. Is the token valid?');
+          console.error('  3. Are CORS headers configured correctly?');
+          console.error('  4. Check browser console for network errors');
+          console.error('  5. API_URL:', API_URL);
+          setIsConnected(false);
+        } else if (eventSource.readyState === EventSource.CONNECTING) {
+          console.log('SSE reconnecting...');
+        }
+        // EventSource will automatically try to reconnect
+      };
+    });
     
     // Cleanup on unmount
     return () => {

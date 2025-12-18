@@ -509,6 +509,15 @@ router.get('/logs/status-changes', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// Test endpoint to verify SSE route is accessible
+router.get('/logs/stream/test', authenticate, (req: AuthRequest, res: Response) => {
+  res.json({ 
+    message: 'SSE endpoint is accessible',
+    timestamp: new Date().toISOString(),
+    user: req.userEmail
+  });
+});
+
 // Handle OPTIONS for SSE endpoint (CORS preflight)
 router.options('/logs/stream', (req: Request, res: Response) => {
   const origin = req.headers.origin;
