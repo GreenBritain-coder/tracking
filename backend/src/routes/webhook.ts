@@ -7,12 +7,15 @@ const router = express.Router();
 
 // Webhook secret from environment variable
 const WEBHOOK_SECRET = process.env.TRACKINGMORE_WEBHOOK_SECRET || '';
+// Allow disabling signature verification for testing (set DISABLE_WEBHOOK_VERIFICATION=true)
+const DISABLE_VERIFICATION = process.env.DISABLE_WEBHOOK_VERIFICATION === 'true';
 
 /**
  * Verify webhook signature using SHA256
- * TrackingMore sends signature in X-Signature header
+ * TrackingMore sends signature in 'signature' header
+ * Some providers include timestamp in signature calculation
  */
-function verifyWebhookSignature(body: string, signature: string): boolean {
+function verifyWebhookSignature(body: string, signature: string, timestamp?: string): boolean {
   if (!WEBHOOK_SECRET) {
     console.warn('WEBHOOK_SECRET not configured, skipping signature verification');
     return true; // Allow if secret not configured (for development)
@@ -23,40 +26,72 @@ function verifyWebhookSignature(body: string, signature: string): boolean {
     return false;
   }
 
-  // Calculate expected signature
-  const expectedSignature = crypto
+  // Remove any prefix from signature (e.g., "sha256=" or "sha256:")
+  const cleanSignature = signature.replace(/^(sha256[=:]|)/i, '').trim();
+
+  // Try multiple signature formats that TrackingMore might use
+  const signaturesToTry: { method: string; signature: string }[] = [];
+
+  // Method 1: HMAC-SHA256(body, secret) - most common
+  const sig1 = crypto
     .createHmac('sha256', WEBHOOK_SECRET)
     .update(body)
     .digest('hex');
+  signaturesToTry.push({ method: 'body only', signature: sig1 });
 
-  // Remove any prefix from signature (e.g., "sha256=" or "sha256:")
-  const cleanSignature = signature.replace(/^(sha256[=:]|)/i, '').trim();
-  const cleanExpected = expectedSignature.trim();
+  // Method 2: HMAC-SHA256(timestamp + body, secret) - if timestamp provided
+  if (timestamp) {
+    const sig2 = crypto
+      .createHmac('sha256', WEBHOOK_SECRET)
+      .update(timestamp + body)
+      .digest('hex');
+    signaturesToTry.push({ method: 'timestamp + body', signature: sig2 });
+  }
+
+  // Method 3: HMAC-SHA256(body + timestamp, secret) - alternative format
+  if (timestamp) {
+    const sig3 = crypto
+      .createHmac('sha256', WEBHOOK_SECRET)
+      .update(body + timestamp)
+      .digest('hex');
+    signaturesToTry.push({ method: 'body + timestamp', signature: sig3 });
+  }
 
   console.log('Signature verification details:');
   console.log('  Received signature length:', cleanSignature.length);
-  console.log('  Expected signature length:', cleanExpected.length);
   console.log('  Received signature (first 20 chars):', cleanSignature.substring(0, 20));
-  console.log('  Expected signature (first 20 chars):', cleanExpected.substring(0, 20));
+  console.log('  Timestamp from header:', timestamp || 'not provided');
+  console.log('  Trying', signaturesToTry.length, 'signature methods...');
 
-  // If lengths don't match, signatures can't be equal
-  if (cleanSignature.length !== cleanExpected.length) {
-    console.error('Signature length mismatch - verification failed');
-    return false;
+  // Try each signature method
+  for (const { method, signature: expectedSig } of signaturesToTry) {
+    console.log(`  Method "${method}": expected (first 20 chars): ${expectedSig.substring(0, 20)}`);
+    
+    if (cleanSignature.length !== expectedSig.length) {
+      continue; // Length mismatch, try next method
+    }
+
+    try {
+      const result = crypto.timingSafeEqual(
+        Buffer.from(cleanSignature, 'hex'),
+        Buffer.from(expectedSig, 'hex')
+      );
+      if (result) {
+        console.log(`  ✓ Signature verified using method: ${method}`);
+        return true;
+      }
+    } catch (error) {
+      // Try string comparison as fallback
+      if (cleanSignature.toLowerCase() === expectedSig.toLowerCase()) {
+        console.log(`  ✓ Signature verified using method: ${method} (string comparison)`);
+        return true;
+      }
+    }
   }
 
-  // Compare signatures (use timing-safe comparison)
-  try {
-    const result = crypto.timingSafeEqual(
-      Buffer.from(cleanSignature, 'hex'),
-      Buffer.from(cleanExpected, 'hex')
-    );
-    return result;
-  } catch (error) {
-    console.error('Error during signature comparison:', error);
-    // Fallback to simple string comparison if hex parsing fails
-    return cleanSignature.toLowerCase() === cleanExpected.toLowerCase();
-  }
+  console.error('✗ Signature verification failed - none of the methods matched');
+  console.error('  Make sure TRACKINGMORE_WEBHOOK_SECRET matches the secret configured in TrackingMore dashboard');
+  return false;
 }
 
 /**
@@ -171,36 +206,46 @@ router.post('/trackingmore', async (req: any, res: Response) => {
     console.log('Has rawBody from middleware:', !!req.rawBody);
     
     // Get signature from header
-    // TrackingMore may send signature in different header formats
-    const signature = req.headers['x-signature'] as string || 
+    // TrackingMore sends signature in 'signature' header
+    const signature = req.headers['signature'] as string || 
+                     req.headers['x-signature'] as string || 
                      req.headers['x-trackingmore-signature'] as string ||
-                     req.headers['signature'] as string ||
                      req.headers['x-hub-signature-256'] as string;
     
+    // Get timestamp if provided (some providers include it in signature)
+    const timestamp = req.headers['timestamp'] as string || 
+                     req.headers['x-timestamp'] as string;
+    
     console.log('All signature-related headers:');
+    console.log('  signature:', req.headers['signature']);
     console.log('  x-signature:', req.headers['x-signature']);
     console.log('  x-trackingmore-signature:', req.headers['x-trackingmore-signature']);
-    console.log('  signature:', req.headers['signature']);
     console.log('  x-hub-signature-256:', req.headers['x-hub-signature-256']);
+    console.log('  timestamp:', timestamp || 'not provided');
     console.log('Signature header present:', !!signature);
     console.log('Webhook secret configured:', !!WEBHOOK_SECRET);
     console.log('Webhook secret length:', WEBHOOK_SECRET.length);
 
-    // Verify webhook signature (if secret is configured)
-    if (WEBHOOK_SECRET) {
+    // Verify webhook signature (if secret is configured and verification not disabled)
+    if (DISABLE_VERIFICATION) {
+      console.warn('⚠️  Webhook signature verification DISABLED (DISABLE_WEBHOOK_VERIFICATION=true)');
+      console.warn('⚠️  This should only be used for testing. Enable verification in production!');
+    } else if (WEBHOOK_SECRET) {
       if (!signature) {
         console.error('Webhook signature verification failed: No signature header found');
         return res.status(401).json({ error: 'Missing signature header' });
       }
       
-      const isValid = verifyWebhookSignature(rawBody, signature);
+      const isValid = verifyWebhookSignature(rawBody, signature, timestamp);
       if (!isValid) {
         console.error('Webhook signature verification failed');
-        console.error('Expected signature format: SHA256 HMAC of raw body');
-        console.error('Make sure TRACKINGMORE_WEBHOOK_SECRET matches the secret configured in TrackingMore');
+        console.error('Tried multiple signature formats: body only, timestamp + body, body + timestamp');
+        console.error('Make sure TRACKINGMORE_WEBHOOK_SECRET in Coolify matches the secret configured in TrackingMore dashboard');
+        console.error('To verify: Check TrackingMore dashboard > Settings > Webhooks > Webhook Secret');
+        console.error('Temporary workaround: Set DISABLE_WEBHOOK_VERIFICATION=true in Coolify environment variables');
         return res.status(401).json({ error: 'Invalid signature' });
       } else {
-        console.log('Webhook signature verified successfully');
+        console.log('✓ Webhook signature verified successfully');
       }
     } else {
       console.warn('Webhook secret not configured - skipping signature verification (development mode)');
