@@ -21,7 +21,177 @@ import { verifyToken } from '../services/auth';
 
 const router = express.Router();
 
-// All routes require authentication
+// SSE routes must be defined BEFORE authenticate middleware
+// because EventSource can't send custom headers, so we use query parameter
+// Test endpoint to verify SSE route is accessible
+router.get('/logs/stream/test', async (req: Request, res: Response) => {
+  const token = req.headers.authorization?.replace('Bearer ', '') || req.query.token as string;
+  
+  if (!token) {
+    return res.status(401).json({ error: 'Token required' });
+  }
+  
+  const payload = verifyToken(token);
+  if (!payload) {
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+  
+  res.json({ 
+    message: 'SSE endpoint is accessible',
+    timestamp: new Date().toISOString(),
+    user: payload.email
+  });
+});
+
+// Handle OPTIONS for SSE endpoint (CORS preflight)
+router.options('/logs/stream', (req: Request, res: Response) => {
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Cache-Control');
+  res.status(204).end();
+});
+
+// SSE endpoint for real-time log updates
+// Note: EventSource doesn't support custom headers, so we accept token as query param
+router.get('/logs/stream', async (req: Request, res: Response) => {
+  console.log('=== SSE CONNECTION ATTEMPT ===');
+  console.log('Method:', req.method);
+  console.log('URL:', req.url);
+  console.log('Path:', req.path);
+  console.log('Origin:', req.headers.origin);
+  console.log('User-Agent:', req.headers['user-agent']);
+  console.log('Query params:', Object.keys(req.query));
+  console.log('Has token in query:', !!req.query.token);
+  
+  // Get token from query parameter (EventSource limitation)
+  const token = req.query.token as string;
+  
+  if (!token) {
+    console.error('SSE connection rejected: No token provided');
+    return res.status(401).json({ error: 'Token required' });
+  }
+  
+  // Verify token manually
+  const payload = verifyToken(token);
+  
+  if (!payload) {
+    console.error('SSE connection rejected: Invalid token');
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+  
+  console.log('SSE connection accepted for user:', payload.email);
+  
+  // Set headers for SSE
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+  
+  // CORS headers for SSE (must be set before any writes)
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Cache-Control');
+  
+  // Send initial connection message
+  res.write(`data: ${JSON.stringify({ type: 'connected', message: 'Stream connected', timestamp: new Date().toISOString() })}\n\n`);
+  
+  let lastCheck = new Date(Date.now() - 60000); // Start from 1 minute ago
+  let heartbeatCount = 0;
+  
+  const checkInterval = setInterval(async () => {
+    try {
+      // Get new logs since last check
+      const newLogs = await pool.query(
+        `WITH status_changes AS (
+          SELECT
+            sh.id,
+            t.tracking_number,
+            lag(sh.status) OVER (PARTITION BY sh.tracking_number_id ORDER BY sh.timestamp) as old_status,
+            sh.status as new_status,
+            t.status_details,
+            b.name as box_name,
+            b.id as box_id,
+            sh.timestamp as changed_at,
+            CASE
+              WHEN lag(sh.status) OVER (PARTITION BY sh.tracking_number_id ORDER BY sh.timestamp) != sh.status THEN 'status_change'
+              ELSE 'details_update'
+            END as change_type
+          FROM status_history sh
+          JOIN tracking_numbers t ON sh.tracking_number_id = t.id
+          LEFT JOIN boxes b ON t.box_id = b.id
+          WHERE sh.timestamp > $1
+        )
+        SELECT * FROM status_changes
+        ORDER BY changed_at DESC
+        LIMIT 50`,
+        [lastCheck]
+      );
+      
+      if (newLogs.rows.length > 0) {
+        // Send new logs to client
+        res.write(`data: ${JSON.stringify({ 
+          type: 'logs', 
+          logs: newLogs.rows,
+          timestamp: new Date().toISOString()
+        })}\n\n`);
+        
+        // Update last check time to the most recent log
+        lastCheck = newLogs.rows[0].changed_at;
+      }
+      
+      // Send heartbeat every 30 seconds (every 15 intervals at 2s each)
+      heartbeatCount++;
+      if (heartbeatCount >= 15) {
+        res.write(`data: ${JSON.stringify({ 
+          type: 'heartbeat', 
+          timestamp: new Date().toISOString() 
+        })}\n\n`);
+        heartbeatCount = 0;
+      }
+    } catch (error) {
+      console.error('Error in SSE stream:', error);
+      res.write(`data: ${JSON.stringify({ 
+        type: 'error', 
+        message: 'Stream error',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      })}\n\n`);
+    }
+  }, 2000); // Check every 2 seconds
+  
+  // Clean up on client disconnect
+  req.on('close', () => {
+    clearInterval(checkInterval);
+    console.log('SSE client disconnected for user:', payload.email);
+    res.end();
+  });
+  
+  // Also handle errors
+  req.on('error', (error) => {
+    console.error('SSE request error:', error);
+    clearInterval(checkInterval);
+    res.end();
+  });
+  
+  // Handle response errors
+  res.on('error', (error) => {
+    console.error('SSE response error:', error);
+    clearInterval(checkInterval);
+  });
+});
+
+// All other routes require authentication
 router.use(authenticate);
 
 // Boxes endpoints
@@ -507,163 +677,6 @@ router.get('/logs/status-changes', async (req: AuthRequest, res: Response) => {
     console.error('Error fetching status change logs:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
-});
-
-// Test endpoint to verify SSE route is accessible
-router.get('/logs/stream/test', authenticate, (req: AuthRequest, res: Response) => {
-  res.json({ 
-    message: 'SSE endpoint is accessible',
-    timestamp: new Date().toISOString(),
-    user: req.userEmail
-  });
-});
-
-// Handle OPTIONS for SSE endpoint (CORS preflight)
-router.options('/logs/stream', (req: Request, res: Response) => {
-  const origin = req.headers.origin;
-  if (origin) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-  } else {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-  }
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Cache-Control');
-  res.status(204).end();
-});
-
-// SSE endpoint for real-time log updates
-// Note: EventSource doesn't support custom headers, so we accept token as query param
-router.get('/logs/stream', async (req: Request, res: Response) => {
-  console.log('=== SSE CONNECTION ATTEMPT ===');
-  console.log('Method:', req.method);
-  console.log('URL:', req.url);
-  console.log('Path:', req.path);
-  console.log('Origin:', req.headers.origin);
-  console.log('User-Agent:', req.headers['user-agent']);
-  console.log('Query params:', Object.keys(req.query));
-  console.log('Has token in query:', !!req.query.token);
-  
-  // Get token from query parameter (EventSource limitation)
-  const token = req.query.token as string;
-  
-  if (!token) {
-    console.error('SSE connection rejected: No token provided');
-    return res.status(401).json({ error: 'Token required' });
-  }
-  
-  // Verify token manually
-  const payload = verifyToken(token);
-  
-  if (!payload) {
-    console.error('SSE connection rejected: Invalid token');
-    return res.status(401).json({ error: 'Invalid token' });
-  }
-  
-  console.log('SSE connection accepted for user:', payload.email);
-  
-  // Set headers for SSE
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
-  
-  // CORS headers for SSE (must be set before any writes)
-  const origin = req.headers.origin;
-  if (origin) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-  } else {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-  }
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Cache-Control');
-  
-  // Send initial connection message
-  res.write(`data: ${JSON.stringify({ type: 'connected', message: 'Stream connected', timestamp: new Date().toISOString() })}\n\n`);
-  
-  let lastCheck = new Date(Date.now() - 60000); // Start from 1 minute ago
-  let heartbeatCount = 0;
-  
-  const checkInterval = setInterval(async () => {
-    try {
-      // Get new logs since last check
-      const newLogs = await pool.query(
-        `WITH status_changes AS (
-          SELECT
-            sh.id,
-            t.tracking_number,
-            lag(sh.status) OVER (PARTITION BY sh.tracking_number_id ORDER BY sh.timestamp) as old_status,
-            sh.status as new_status,
-            t.status_details,
-            b.name as box_name,
-            b.id as box_id,
-            sh.timestamp as changed_at,
-            CASE
-              WHEN lag(sh.status) OVER (PARTITION BY sh.tracking_number_id ORDER BY sh.timestamp) != sh.status THEN 'status_change'
-              ELSE 'details_update'
-            END as change_type
-          FROM status_history sh
-          JOIN tracking_numbers t ON sh.tracking_number_id = t.id
-          LEFT JOIN boxes b ON t.box_id = b.id
-          WHERE sh.timestamp > $1
-        )
-        SELECT * FROM status_changes
-        ORDER BY changed_at DESC
-        LIMIT 50`,
-        [lastCheck]
-      );
-      
-      if (newLogs.rows.length > 0) {
-        // Send new logs to client
-        res.write(`data: ${JSON.stringify({ 
-          type: 'logs', 
-          logs: newLogs.rows,
-          timestamp: new Date().toISOString()
-        })}\n\n`);
-        
-        // Update last check time to the most recent log
-        lastCheck = newLogs.rows[0].changed_at;
-      }
-      
-      // Send heartbeat every 30 seconds (every 15 intervals at 2s each)
-      heartbeatCount++;
-      if (heartbeatCount >= 15) {
-        res.write(`data: ${JSON.stringify({ 
-          type: 'heartbeat', 
-          timestamp: new Date().toISOString() 
-        })}\n\n`);
-        heartbeatCount = 0;
-      }
-    } catch (error) {
-      console.error('Error in SSE stream:', error);
-      res.write(`data: ${JSON.stringify({ 
-        type: 'error', 
-        message: 'Stream error',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      })}\n\n`);
-    }
-  }, 2000); // Check every 2 seconds
-  
-  // Clean up on client disconnect
-  req.on('close', () => {
-    clearInterval(checkInterval);
-    console.log('SSE client disconnected for user:', payload.email);
-    res.end();
-  });
-  
-  // Also handle errors
-  req.on('error', (error) => {
-    console.error('SSE request error:', error);
-    clearInterval(checkInterval);
-    res.end();
-  });
-  
-  // Handle response errors
-  res.on('error', (error) => {
-    console.error('SSE response error:', error);
-    clearInterval(checkInterval);
-  });
 });
 
 export default router;
