@@ -87,9 +87,9 @@ router.get('/logs/stream', async (req: Request, res: Response) => {
   
   console.log('SSE connection accepted for user:', payload.email);
   
-  // Set headers for SSE
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
+  // Set headers for SSE - MUST be set before any writes
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
   
@@ -104,27 +104,21 @@ router.get('/logs/stream', async (req: Request, res: Response) => {
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Cache-Control');
   
-  // Send initial connection message and flush immediately
+  // Set 200 status explicitly
+  res.status(200);
+  
+  // Send initial comment to establish connection immediately
+  // SSE spec: comment lines start with : and are ignored by clients
+  // This helps trigger the EventSource to transition from CONNECTING to OPEN
+  res.write(': SSE connection established\n\n');
+  
+  // Send initial connection message
   // Use proper SSE format: data: followed by JSON, then double newline
   const initialData = { type: 'connected', message: 'Stream connected', timestamp: new Date().toISOString() };
-  const initialMessage = `data: ${JSON.stringify(initialData)}\n\n`;
+  res.write(`data: ${JSON.stringify(initialData)}\n\n`);
   
-  try {
-    res.write(initialMessage);
-    console.log('SSE initial message written:', initialData);
-    
-    // Flush the response to ensure it's sent immediately
-    // Access the underlying Node.js response object for flush()
-    const nodeRes = res as any;
-    if (typeof nodeRes.flush === 'function') {
-      nodeRes.flush();
-      console.log('SSE response flushed');
-    }
-    
-    console.log('SSE initial message sent, connection should be open');
-  } catch (error) {
-    console.error('Error sending initial SSE message:', error);
-  }
+  console.log('SSE initial messages sent (comment + connected)');
+  console.log('Initial data:', initialData);
   
   let lastCheck = new Date(Date.now() - 60000); // Start from 1 minute ago
   let heartbeatCount = 0;
