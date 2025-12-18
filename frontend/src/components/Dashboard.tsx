@@ -263,6 +263,7 @@ export default function Dashboard() {
               setSelectedKingBox(e.target.value ? parseInt(e.target.value) : null);
               setCurrentPage(1); // Reset to first page when filter changes
             }}
+            aria-label="Filter by King Box"
           >
             <option value="">All King Boxes</option>
             {kingBoxes.map((kingBox) => (
@@ -287,6 +288,7 @@ export default function Dashboard() {
               }
               setCurrentPage(1); // Reset to first page when filter changes
             }}
+            aria-label="Filter by Box"
           >
             <option value="">All Boxes</option>
             <option value="-1">📦 No Box (Unassigned)</option>
@@ -306,6 +308,7 @@ export default function Dashboard() {
               setSelectedStatus(value ? value as 'not_scanned' | 'scanned' | 'delivered' : null);
               setCurrentPage(1); // Reset to first page when filter changes
             }}
+            aria-label="Filter by Status"
           >
             <option value="">All Statuses</option>
             <option value="not_scanned">🔴 Not Scanned ({stats.not_scanned})</option>
@@ -332,6 +335,7 @@ export default function Dashboard() {
               setItemsPerPage(parseInt(e.target.value));
               setCurrentPage(1); // Reset to first page when page size changes
             }}
+            aria-label="Items per page"
           >
             <option value="25">25</option>
             <option value="50">50</option>
@@ -413,12 +417,13 @@ export default function Dashboard() {
               trackingNumbers.map((tn) => {
                 const renderTimestampEdit = () => (
                   editingTrackingId === tn.id ? (
-                    <div className="timestamp-edit">
-                      <input
-                        type="date"
-                        value={customTimestamp || (tn.custom_timestamp ? new Date(tn.custom_timestamp).toISOString().slice(0, 10) : '')}
-                        onChange={(e) => setCustomTimestamp(e.target.value)}
-                        onPaste={(e) => {
+                <div className="timestamp-edit">
+                  <input
+                    type="date"
+                    value={customTimestamp || (tn.custom_timestamp ? new Date(tn.custom_timestamp).toISOString().slice(0, 10) : '')}
+                    onChange={(e) => setCustomTimestamp(e.target.value)}
+                    aria-label={`Edit custom timestamp for tracking number ${tn.tracking_number}`}
+                    onPaste={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
                           const pastedText = e.clipboardData.getData('text').trim();
@@ -552,6 +557,7 @@ export default function Dashboard() {
                       }}
                       className="box-select"
                       style={{ padding: '0.3rem', border: '1px solid #ddd', borderRadius: '4px', fontSize: '0.8rem', minWidth: '120px', maxWidth: '130px' }}
+                      aria-label={`Select box for tracking number ${tn.tracking_number}`}
                     >
                       <option value="">No Box</option>
                       {boxes.map((box) => (
@@ -582,6 +588,7 @@ export default function Dashboard() {
                           }
                         }}
                         className="status-select"
+                        aria-label={`Change status for tracking number ${tn.tracking_number}`}
                       >
                         <option value="not_scanned">🔴 Not Scanned</option>
                         <option value="scanned">🟡 Scanned</option>
@@ -627,6 +634,7 @@ export default function Dashboard() {
                     type="date"
                     value={customTimestamp || (tn.custom_timestamp ? new Date(tn.custom_timestamp).toISOString().slice(0, 10) : '')}
                     onChange={(e) => setCustomTimestamp(e.target.value)}
+                    aria-label={`Edit custom timestamp for tracking number ${tn.tracking_number}`}
                     onBlur={() => {
                       if (customTimestamp) {
                         const dateTimestamp = customTimestamp ? new Date(customTimestamp + 'T00:00:00Z').toISOString() : null;
@@ -697,6 +705,7 @@ export default function Dashboard() {
                         const boxId = e.target.value ? parseInt(e.target.value) : null;
                         handleBoxChange(tn.id, boxId);
                       }}
+                      aria-label={`Select box for tracking number ${tn.tracking_number}`}
                       className="box-select"
                       style={{ width: '100%', padding: '0.4rem', border: '1px solid #ddd', borderRadius: '4px', fontSize: '0.9rem' }}
                     >
@@ -738,6 +747,7 @@ export default function Dashboard() {
                           handleStatusChange(tn.id, newStatus, tn.custom_timestamp || null);
                         }
                       }}
+                      aria-label={`Change status for tracking number ${tn.tracking_number}`}
                       className="status-select"
                       style={{ width: '100%', minHeight: '44px' }}
                     >

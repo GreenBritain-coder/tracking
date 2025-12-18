@@ -159,5 +159,9 @@ export const api = {
     if (trackingNumber) params.trackingNumber = trackingNumber;
     return axios.get<StatusChangeLog[]>(`${API_URL}/tracking/logs/status-changes`, { params });
   },
+
+  // Tracking Events
+  getTrackingEvents: (id: number) =>
+    axios.get<TrackingEvent[]>(`${API_URL}/tracking/numbers/${id}/events`),
 };
 

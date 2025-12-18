@@ -301,6 +301,7 @@ export default function AddTracking() {
                           }}
                           autoFocus
                           className="box-edit-input"
+                          aria-label="Edit box name"
                         />
                         <label className="checkbox-label">
                           <input
@@ -316,6 +317,7 @@ export default function AddTracking() {
                           <select
                             value={editingBox.parent_box_id || ''}
                             onChange={(e) => setEditingBox({ ...editingBox, parent_box_id: e.target.value ? parseInt(e.target.value) : null })}
+                            aria-label="Select parent king box"
                           >
                             <option value="">No King Box</option>
                             {kingBoxes.map((kb) => (
