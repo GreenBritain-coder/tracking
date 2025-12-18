@@ -847,7 +847,7 @@ export default function Dashboard() {
                 </div>
               ) : (
                 <div className="event-timeline">
-                  {trackingEvents.map((event, index) => (
+                  {trackingEvents.map((event) => (
                     <div key={event.id} className="event-item">
                       <div className="event-marker"></div>
                       <div className="event-content">
