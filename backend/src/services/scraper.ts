@@ -229,6 +229,13 @@ export async function checkRoyalMailStatus(trackingNumber: string): Promise<{
   details?: string;
   statusHeader?: string;
   trackingmoreStatus?: string;
+  events?: Array<{
+    event_date: Date | string;
+    location?: string | null;
+    status?: string | null;
+    description?: string | null;
+    checkpoint_status?: string | null;
+  }>;
 }> {
   try {
     // Use TrackingMore API
