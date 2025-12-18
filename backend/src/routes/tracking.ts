@@ -107,18 +107,38 @@ router.get('/logs/stream', async (req: Request, res: Response) => {
   // Set 200 status explicitly
   res.status(200);
   
-  // Send initial comment to establish connection immediately
-  // SSE spec: comment lines start with : and are ignored by clients
-  // This helps trigger the EventSource to transition from CONNECTING to OPEN
-  res.write(': SSE connection established\n\n');
+  // CRITICAL FIX: Reverse proxies buffer small responses
+  // We need to send enough data (>4KB typically) to force immediate flush
+  // Send large padding using SSE comment lines (comments start with :)
+  const paddingSize = 4096; // 4KB to force proxy flush
+  const padding = ': ' + 'x'.repeat(paddingSize) + '\n';
+  res.write(padding);
+  
+  // Send connection establishment messages
+  res.write(': SSE connection established\n');
+  res.write(': Server ready, sending initial data\n\n');
   
   // Send initial connection message
   // Use proper SSE format: data: followed by JSON, then double newline
   const initialData = { type: 'connected', message: 'Stream connected', timestamp: new Date().toISOString() };
   res.write(`data: ${JSON.stringify(initialData)}\n\n`);
   
-  console.log('SSE initial messages sent (comment + connected)');
+  // Send another small keepalive to ensure delivery
+  res.write(': connection confirmed\n\n');
+  
+  console.log('SSE initial messages sent (with 4KB buffer-busting padding)');
   console.log('Initial data:', initialData);
+  
+  // Try to force flush using the underlying socket
+  const nodeRes = res as any;
+  if (nodeRes.socket && typeof nodeRes.socket.flush === 'function') {
+    try {
+      nodeRes.socket.flush();
+      console.log('Socket flushed');
+    } catch (e) {
+      // Ignore flush errors
+    }
+  }
   
   let lastCheck = new Date(Date.now() - 60000); // Start from 1 minute ago
   let heartbeatCount = 0;
