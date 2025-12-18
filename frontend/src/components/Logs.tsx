@@ -112,8 +112,19 @@ export default function Logs() {
         console.log('✓ SSE connection opened successfully');
         console.log('EventSource readyState:', eventSource.readyState, '(should be 1 = OPEN)');
         setIsConnected(true);
-        clearInterval(stateCheckInterval);
+        if (stateCheckInterval) {
+          clearInterval(stateCheckInterval);
+        }
       };
+      
+      // Also check readyState immediately after a short delay
+      // Sometimes onopen doesn't fire but readyState becomes OPEN
+      setTimeout(() => {
+        if (eventSource.readyState === EventSource.OPEN) {
+          console.log('✓ EventSource readyState is OPEN (detected via timeout check)');
+          setIsConnected(true);
+        }
+      }, 1000);
       
       eventSource.onmessage = (event) => {
         try {
