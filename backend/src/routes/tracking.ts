@@ -104,13 +104,48 @@ router.get('/logs/stream', async (req: Request, res: Response) => {
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Cache-Control');
   
-  // Send initial connection message
-  res.write(`data: ${JSON.stringify({ type: 'connected', message: 'Stream connected', timestamp: new Date().toISOString() })}\n\n`);
+  // Send initial connection message and flush immediately
+  const initialMessage = `data: ${JSON.stringify({ type: 'connected', message: 'Stream connected', timestamp: new Date().toISOString() })}\n\n`;
+  res.write(initialMessage);
+  
+  // Flush the response to ensure it's sent immediately
+  if (typeof res.flush === 'function') {
+    res.flush();
+  }
+  
+  console.log('SSE initial message sent, connection should be open');
   
   let lastCheck = new Date(Date.now() - 60000); // Start from 1 minute ago
   let heartbeatCount = 0;
+  let isConnectionOpen = true;
+  
+  // Send heartbeat more frequently initially to keep connection alive
+  const sendHeartbeat = () => {
+    if (!isConnectionOpen) return;
+    try {
+      res.write(`data: ${JSON.stringify({ 
+        type: 'heartbeat', 
+        timestamp: new Date().toISOString() 
+      })}\n\n`);
+      if (typeof res.flush === 'function') {
+        res.flush();
+      }
+    } catch (error) {
+      console.error('Error sending heartbeat:', error);
+      isConnectionOpen = false;
+    }
+  };
+  
+  // Send heartbeat every 10 seconds to keep connection alive
+  const heartbeatInterval = setInterval(sendHeartbeat, 10000);
   
   const checkInterval = setInterval(async () => {
+    if (!isConnectionOpen) {
+      clearInterval(checkInterval);
+      clearInterval(heartbeatInterval);
+      return;
+    }
+    
     try {
       // Get new logs since last check
       const newLogs = await pool.query(
@@ -139,7 +174,7 @@ router.get('/logs/stream', async (req: Request, res: Response) => {
         [lastCheck]
       );
       
-      if (newLogs.rows.length > 0) {
+      if (newLogs.rows.length > 0 && isConnectionOpen) {
         // Send new logs to client
         res.write(`data: ${JSON.stringify({ 
           type: 'logs', 
@@ -147,47 +182,68 @@ router.get('/logs/stream', async (req: Request, res: Response) => {
           timestamp: new Date().toISOString()
         })}\n\n`);
         
+        if (typeof res.flush === 'function') {
+          res.flush();
+        }
+        
         // Update last check time to the most recent log
         lastCheck = newLogs.rows[0].changed_at;
       }
-      
-      // Send heartbeat every 30 seconds (every 15 intervals at 2s each)
-      heartbeatCount++;
-      if (heartbeatCount >= 15) {
-        res.write(`data: ${JSON.stringify({ 
-          type: 'heartbeat', 
-          timestamp: new Date().toISOString() 
-        })}\n\n`);
-        heartbeatCount = 0;
-      }
     } catch (error) {
       console.error('Error in SSE stream:', error);
-      res.write(`data: ${JSON.stringify({ 
-        type: 'error', 
-        message: 'Stream error',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      })}\n\n`);
+      if (isConnectionOpen) {
+        try {
+          res.write(`data: ${JSON.stringify({ 
+            type: 'error', 
+            message: 'Stream error',
+            error: error instanceof Error ? error.message : 'Unknown error'
+          })}\n\n`);
+          if (typeof res.flush === 'function') {
+            res.flush();
+          }
+        } catch (writeError) {
+          console.error('Error writing error message:', writeError);
+          isConnectionOpen = false;
+        }
+      }
     }
   }, 2000); // Check every 2 seconds
   
   // Clean up on client disconnect
-  req.on('close', () => {
+  const cleanup = () => {
+    if (!isConnectionOpen) return; // Already cleaned up
+    isConnectionOpen = false;
     clearInterval(checkInterval);
-    console.log('SSE client disconnected for user:', payload.email);
-    res.end();
+    clearInterval(heartbeatInterval);
+    console.log('SSE connection cleaned up for user:', payload.email);
+    try {
+      res.end();
+    } catch (error) {
+      // Connection might already be closed
+    }
+  };
+  
+  req.on('close', () => {
+    console.log('SSE client disconnected (req.close) for user:', payload.email);
+    cleanup();
   });
   
   // Also handle errors
   req.on('error', (error) => {
     console.error('SSE request error:', error);
-    clearInterval(checkInterval);
-    res.end();
+    cleanup();
   });
   
   // Handle response errors
   res.on('error', (error) => {
     console.error('SSE response error:', error);
-    clearInterval(checkInterval);
+    cleanup();
+  });
+  
+  // Handle response finish
+  res.on('finish', () => {
+    console.log('SSE response finished for user:', payload.email);
+    cleanup();
   });
 });
 
