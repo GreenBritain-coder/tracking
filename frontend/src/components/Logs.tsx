@@ -80,16 +80,48 @@ export default function Logs() {
       
       eventSourceRef.current = eventSource;
       
+      // Monitor readyState changes to detect when connection opens
+      const checkReadyState = () => {
+        const states = ['CONNECTING', 'OPEN', 'CLOSED'];
+        const currentState = eventSource.readyState;
+        console.log('EventSource readyState:', states[currentState], `(${currentState})`);
+        if (currentState === EventSource.OPEN) {
+          console.log('✓ EventSource is OPEN - setting connected to true');
+          setIsConnected(true);
+        } else if (currentState === EventSource.CLOSED) {
+          setIsConnected(false);
+        }
+      };
+      
+      // Check initial state
+      checkReadyState();
+      
+      // Monitor state changes (check every 500ms for first 5 seconds, then stop)
+      let checkCount = 0;
+      const maxChecks = 10; // 5 seconds
+      const stateCheckInterval = setInterval(() => {
+        checkReadyState();
+        checkCount++;
+        if (checkCount >= maxChecks) {
+          clearInterval(stateCheckInterval);
+          console.log('Stopped monitoring readyState (connection should be established by now)');
+        }
+      }, 500);
+      
       eventSource.onopen = () => {
         console.log('✓ SSE connection opened successfully');
+        console.log('EventSource readyState:', eventSource.readyState, '(should be 1 = OPEN)');
         setIsConnected(true);
+        clearInterval(stateCheckInterval);
       };
       
       eventSource.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          console.log('SSE message received:', data.type);
           
           if (data.type === 'logs' && data.logs && data.logs.length > 0) {
+            console.log(`Received ${data.logs.length} new log entries`);
             // Add all new logs (filters will be applied when rendering)
             setLogs(prevLogs => {
               const newLogIds = new Set(data.logs.map((l: StatusChangeLog) => l.id));
@@ -100,8 +132,10 @@ export default function Logs() {
           } else if (data.type === 'heartbeat') {
             // Connection is alive, just log for debugging
             console.debug('SSE heartbeat received');
+            setIsConnected(true); // Ensure we're marked as connected on heartbeat
           } else if (data.type === 'connected') {
             console.log('SSE connected:', data.message);
+            setIsConnected(true);
           } else if (data.type === 'error') {
             console.error('SSE error:', data.message);
           }
@@ -126,25 +160,14 @@ export default function Logs() {
           console.error('  5. API_URL:', API_URL);
           console.error('  6. Full URL:', eventSource.url.replace(/token=[^&]+/, 'token=***'));
           
-          // Try to get more info from the network request
-          fetch(eventSource.url, {
-            method: 'GET',
-            headers: {
-              'Accept': 'text/event-stream'
-            }
-          }).then(response => {
-            console.error('Direct fetch test - Status:', response.status);
-            console.error('Direct fetch test - Headers:', Object.fromEntries(response.headers.entries()));
-            return response.text();
-          }).then(text => {
-            console.error('Direct fetch test - Response preview:', text.substring(0, 200));
-          }).catch(fetchError => {
-            console.error('Direct fetch test - Error:', fetchError);
-          });
-          
           setIsConnected(false);
+          clearInterval(stateCheckInterval);
         } else if (eventSource.readyState === EventSource.CONNECTING) {
           console.log('SSE reconnecting...');
+        } else if (eventSource.readyState === EventSource.OPEN) {
+          // Sometimes onerror fires even when connection is open
+          console.log('SSE error event but connection is OPEN - might be temporary');
+          setIsConnected(true);
         }
         // EventSource will automatically try to reconnect
       };
@@ -153,6 +176,7 @@ export default function Logs() {
     // Cleanup on unmount
     return () => {
       if (eventSourceRef.current) {
+        console.log('Cleaning up SSE connection');
         eventSourceRef.current.close();
         eventSourceRef.current = null;
       }
