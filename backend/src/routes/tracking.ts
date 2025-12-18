@@ -109,8 +109,10 @@ router.get('/logs/stream', async (req: Request, res: Response) => {
   res.write(initialMessage);
   
   // Flush the response to ensure it's sent immediately
-  if (typeof res.flush === 'function') {
-    res.flush();
+  // Access the underlying Node.js response object for flush()
+  const nodeRes = res as any;
+  if (typeof nodeRes.flush === 'function') {
+    nodeRes.flush();
   }
   
   console.log('SSE initial message sent, connection should be open');
@@ -127,8 +129,9 @@ router.get('/logs/stream', async (req: Request, res: Response) => {
         type: 'heartbeat', 
         timestamp: new Date().toISOString() 
       })}\n\n`);
-      if (typeof res.flush === 'function') {
-        res.flush();
+      const nodeRes = res as any;
+      if (typeof nodeRes.flush === 'function') {
+        nodeRes.flush();
       }
     } catch (error) {
       console.error('Error sending heartbeat:', error);
@@ -182,8 +185,9 @@ router.get('/logs/stream', async (req: Request, res: Response) => {
           timestamp: new Date().toISOString()
         })}\n\n`);
         
-        if (typeof res.flush === 'function') {
-          res.flush();
+        const nodeRes = res as any;
+        if (typeof nodeRes.flush === 'function') {
+          nodeRes.flush();
         }
         
         // Update last check time to the most recent log
@@ -198,8 +202,9 @@ router.get('/logs/stream', async (req: Request, res: Response) => {
             message: 'Stream error',
             error: error instanceof Error ? error.message : 'Unknown error'
           })}\n\n`);
-          if (typeof res.flush === 'function') {
-            res.flush();
+          const nodeRes = res as any;
+          if (typeof nodeRes.flush === 'function') {
+            nodeRes.flush();
           }
         } catch (writeError) {
           console.error('Error writing error message:', writeError);
