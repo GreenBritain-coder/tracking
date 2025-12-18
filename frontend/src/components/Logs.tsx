@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { api, StatusChangeLog, Box } from '../api/api';
 import './Logs.css';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 export default function Logs() {
   const [logs, setLogs] = useState<StatusChangeLog[]>([]);
@@ -12,6 +14,8 @@ export default function Logs() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'not_scanned' | 'scanned' | 'delivered'>('all');
   const [boxFilter, setBoxFilter] = useState<number | null>(null);
   const [trackingNumberSearch, setTrackingNumberSearch] = useState<string>('');
+  const [isConnected, setIsConnected] = useState(false);
+  const eventSourceRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
     loadBoxes();
@@ -20,6 +24,72 @@ export default function Logs() {
   useEffect(() => {
     loadLogs();
   }, [limit, changeTypeFilter, statusFilter, boxFilter, trackingNumberSearch]);
+
+  // Set up SSE connection for real-time updates
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    
+    if (!token) {
+      return;
+    }
+    
+    // Close existing connection if any
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+    }
+    
+    // Create new SSE connection
+    const eventSource = new EventSource(
+      `${API_URL}/tracking/logs/stream?token=${encodeURIComponent(token)}`
+    );
+    
+    eventSourceRef.current = eventSource;
+    
+    eventSource.onopen = () => {
+      console.log('SSE connection opened');
+      setIsConnected(true);
+    };
+    
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        
+        if (data.type === 'logs' && data.logs && data.logs.length > 0) {
+          // Add all new logs (filters will be applied when rendering)
+          setLogs(prevLogs => {
+            const newLogIds = new Set(data.logs.map((l: StatusChangeLog) => l.id));
+            const filteredPrev = prevLogs.filter(l => !newLogIds.has(l.id));
+            // Add new logs at the beginning, then apply limit
+            return [...data.logs, ...filteredPrev].slice(0, limit * 2); // Keep more in memory for filtering
+          });
+        } else if (data.type === 'heartbeat') {
+          // Connection is alive, just log for debugging
+          console.debug('SSE heartbeat received');
+        } else if (data.type === 'connected') {
+          console.log('SSE connected:', data.message);
+        } else if (data.type === 'error') {
+          console.error('SSE error:', data.message);
+        }
+      } catch (error) {
+        console.error('Error parsing SSE message:', error);
+      }
+    };
+    
+    eventSource.onerror = (error) => {
+      console.error('SSE connection error:', error);
+      setIsConnected(false);
+      // EventSource will automatically try to reconnect
+    };
+    
+    // Cleanup on unmount
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      setIsConnected(false);
+    };
+  }, []); // Only set up once, filters are applied in onmessage
 
   const loadBoxes = async () => {
     try {
@@ -48,6 +118,22 @@ export default function Logs() {
       setLoading(false);
     }
   };
+
+  // Apply filters to logs when rendering
+  const filteredLogs = logs.filter(log => {
+    if (changeTypeFilter !== 'all' && log.change_type !== changeTypeFilter) {
+      return false;
+    }
+    if (statusFilter !== 'all' && log.new_status !== statusFilter) {
+      return false;
+    }
+    if (trackingNumberSearch && !log.tracking_number.toLowerCase().includes(trackingNumberSearch.toLowerCase())) {
+      return false;
+    }
+    // Note: boxFilter would need box_id in StatusChangeLog to work properly
+    // For now, we'll skip box filtering in real-time updates
+    return true;
+  }).slice(0, limit);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -91,6 +177,9 @@ export default function Logs() {
       <div className="logs-header">
         <h2>📋 Status Change Logs</h2>
         <div className="logs-controls">
+          <span className={`connection-status ${isConnected ? 'connected' : 'disconnected'}`} title={isConnected ? 'Real-time updates active' : 'Real-time updates disconnected'}>
+            {isConnected ? '🟢 Live' : '🔴 Offline'}
+          </span>
           <label>
             Show last:
             <select
@@ -182,7 +271,7 @@ export default function Logs() {
         )}
       </div>
 
-      {logs.length === 0 ? (
+      {filteredLogs.length === 0 ? (
         <div className="no-logs">
           <p>No status changes recorded yet.</p>
           <p>Status changes will appear here when tracking numbers are updated automatically or manually.</p>
@@ -201,7 +290,7 @@ export default function Logs() {
               </tr>
             </thead>
             <tbody>
-              {logs.map((log) => (
+              {filteredLogs.map((log) => (
                 <tr key={log.id}>
                   <td className="timestamp">
                     {formatDate(log.changed_at)}
@@ -247,6 +336,7 @@ export default function Logs() {
         <p>
           <strong>Note:</strong> These logs show recent status changes for tracking numbers.
           Status changes occur through automatic updates (every 4 hours) or manual refreshes.
+          {isConnected && ' Logs update in real-time as changes occur.'}
         </p>
       </div>
     </div>
