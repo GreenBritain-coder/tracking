@@ -191,7 +191,10 @@ export default function Analytics() {
           {sortedBoxAnalytics.map((box) => {
             // Check if box should show green: all items are scanned or delivered (nothing pending)
             // Green if: not_scanned_count === 0 (all items have progressed past "not scanned")
-            const isFullyDelivered = box.total_items > 0 && box.not_scanned_count === 0;
+            // Convert to number in case PostgreSQL returns string
+            const notScannedCount = Number(box.not_scanned_count) || 0;
+            const totalItems = Number(box.total_items) || 0;
+            const isFullyDelivered = totalItems > 0 && notScannedCount === 0;
             
             return (
               <div
