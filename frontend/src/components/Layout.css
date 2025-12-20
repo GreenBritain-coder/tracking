@@ -14,7 +14,7 @@
 .nav-container {
   width: 100%;
   margin: 0;
-  padding: 0 2rem;
+  padding: 0 1rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -76,7 +76,7 @@
   flex: 1;
   width: 100%;
   margin: 0;
-  padding: 2rem;
+  padding: 1rem;
 }
 
 .nav-header {
