@@ -189,10 +189,9 @@ export default function Analytics() {
         </div>
         <div className="boxes-grid">
           {sortedBoxAnalytics.map((box) => {
-            // Check if box is fully delivered or fully scanned (all items in same state)
-            const isFullyDelivered = box.total_items > 0 && 
-                                    (box.delivered_count === box.total_items || 
-                                     box.scanned_count === box.total_items);
+            // Check if box should show green: all items are scanned or delivered (nothing pending)
+            // Green if: not_scanned_count === 0 (all items have progressed past "not scanned")
+            const isFullyDelivered = box.total_items > 0 && box.not_scanned_count === 0;
             
             return (
               <div
