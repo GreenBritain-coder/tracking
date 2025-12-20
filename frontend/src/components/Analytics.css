@@ -1,5 +1,7 @@
 .analytics {
-  width: 100%;
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
 }
 
 .analytics h2 {
@@ -15,10 +17,11 @@
 
 .overview-section {
   background: white;
-  padding: 2rem;
+  padding: 1rem;
   border-radius: 8px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   margin-bottom: 2rem;
+  width: 100% !important;
 }
 
 .overview-section h3 {
@@ -53,6 +56,7 @@
 
 .boxes-section {
   margin-bottom: 2rem;
+  width: 100% !important;
 }
 
 .boxes-section-header {
