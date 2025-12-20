@@ -191,21 +191,30 @@ export default function Analytics() {
           {sortedBoxAnalytics.map((box) => {
             // Check if box should show green: all items are scanned or delivered (nothing pending)
             // Green if: not_scanned_count === 0 (all items have progressed past "not scanned")
+            // Yellow if: scanned_count + delivered_count > 0 (box opened by RM)
             // Convert to number in case PostgreSQL returns string
             const notScannedCount = Number(box.not_scanned_count) || 0;
+            const scannedCount = Number(box.scanned_count) || 0;
+            const deliveredCount = Number(box.delivered_count) || 0;
             const totalItems = Number(box.total_items) || 0;
             const isFullyDelivered = totalItems > 0 && notScannedCount === 0;
+            const hasScanned = (scannedCount + deliveredCount) > 0;
             
             return (
               <div
                 key={box.id}
-                className={`box-card ${selectedBox === box.id ? 'selected' : ''} ${isFullyDelivered ? 'fully-delivered' : ''}`}
+                className={`box-card ${selectedBox === box.id ? 'selected' : ''} ${isFullyDelivered ? 'fully-delivered' : hasScanned ? 'has-scanned' : ''}`}
                 onClick={() =>
                   setSelectedBox(selectedBox === box.id ? null : box.id)
                 }
               >
               <h4>
                 {box.is_king_box ? '👑 ' : ''}{box.name}
+                {hasScanned && (
+                  <span className="rm-opened-badge" title="Box opened by Royal Mail">
+                    📦 RM
+                  </span>
+                )}
               </h4>
               <div className="box-stats">
                 <div className="box-stat">
