@@ -14,8 +14,14 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware - CORS configuration
+// Allow all origins including .onion domains for Tor hidden service support
+// If you need to restrict origins, set ALLOWED_ORIGINS env var (comma-separated)
+const allowedOrigins = process.env.ALLOWED_ORIGINS 
+  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+  : true; // Allow all origins by default
+
 app.use(cors({
-  origin: true, // Allow all origins (or specify your frontend domain)
+  origin: allowedOrigins, // Supports both regular domains and .onion addresses
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control'],
